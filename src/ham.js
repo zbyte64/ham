@@ -1,4 +1,4 @@
-import {_} from 'lodash';
+import _ from 'lodash';
 import {Channel, renderUrl, renderUrlMatcher, assocIn, dissocIn, getIn, doRequest} from '/common';
 
 
@@ -90,7 +90,7 @@ export var HamProcessor = {
     }
   },
   parseResponse: function(response) {
-    return JSON.parse(response.body)
+    return response.content
   },
   callURI: function(url, method, rel, data, callback) {
     var self = this;

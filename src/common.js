@@ -1,6 +1,6 @@
-import {_} from 'lodash';
+import _ from 'lodash';
 //TODO which library do I use?
-import {xhr} from 'xhr-browserify';
+import reqwest from 'reqwest';
 //Things I should find libraries for
 
 
@@ -105,8 +105,18 @@ export function getIn(struct, path) {
 }
 
 export function doRequest(url, method, data, callback) {
-  var request = new xhr();
-  request.open(method, url, function(err, data) {
-    callback(data)
+  var r = reqwest({
+    url: url,
+    method: method,
+    data: data,
+    contentType: 'application/json',
+    withCredentials: true,
+    success: function(payload) {
+      var response = {
+        headers: r.request.getAllResponseHeaders(),
+        content: payload
+      }
+      callback(response)
+    }
   });
 };
