@@ -1,6 +1,6 @@
-require _ from 'lodash';
+import {_} from 'lodash';
 //TODO which library do I use?
-require xhr from 'xhr-browserify';
+import {xhr} from 'xhr-browserify';
 //Things I should find libraries for
 
 
@@ -46,7 +46,7 @@ export function Channel(props) {
   }, props)
 }
 
-var urlTemplatePattern = /\{([^\{\}]*)\}/
+export var urlTemplatePattern = /\{([^\{\}]*)\}/;
 
 export function renderUrl(link, params) {
   var url = link.href;
@@ -54,6 +54,15 @@ export function renderUrl(link, params) {
     url = url.replace("{"+key+"}", val, "g")
   })
   return url;
+}
+
+export function renderUrlMatcher(link) {
+  var matchS = link.href,
+      parts = urlTemplatePattern.match(matchS);
+  _.each(parts, function(val) {
+    matchS.replace("{"+val+"}", "(?P<"+val+">[\w\d]+)")
+  })
+  return new RegExp(matchS);
 }
 
 export function assocIn(struct, path, value) {
@@ -78,7 +87,7 @@ export function dissocIn(struct, path) {
     }
     dissocIn(struct[first], rest)
   } else {
-    del struct[first]
+    delete struct[first]
   }
 }
 
@@ -100,4 +109,4 @@ export function doRequest(url, method, data, callback) {
   request.open(method, url, function(err, data) {
     callback(data)
   });
-}
+};

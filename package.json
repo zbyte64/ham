@@ -1,0 +1,9 @@
+{
+  "name": "ham",
+  "version": "0.0.1",
+  "devDependencies": {
+    "grunt": "~0.4.4",
+    "grunt-traceur": "git://github.com/xmlking/grunt-traceur.git",
+    "bower": "~1.3.2"
+  }
+}

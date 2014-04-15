@@ -1,5 +1,5 @@
-require _ from 'lodash';
-require {Channel, renderUrl, assocIn, dissocIn, getIn, doRequest} from '/common';
+import {_} from 'lodash';
+import {Channel, renderUrl, renderUrlMatcher, assocIn, dissocIn, getIn, doRequest} from '/common';
 
 
 export var HamProcessor = {
@@ -9,7 +9,7 @@ export var HamProcessor = {
   },
   splitURIptr: function(ptr) {
     return _.filter(_.last(ptr.split('#', 2)).split('/'))
-  }
+  },
   subObject: function(document, ptr) {
     var parts = this.splitURIptr(ptr),
         docMeta = document.__meta,
@@ -19,12 +19,13 @@ export var HamProcessor = {
         uri: docMeta.uri + ptr
       }
 
+      /*
       if (false) {
         //TODO resolve sub schema
         var schema = this.schemas[profileURI]
         subObject.__meta.schema = schema
         subObject.__meta.schema_url = profileURI
-      }
+      } */
     return subObject
   },
   rootObject: function(document) {
@@ -39,7 +40,7 @@ export var HamProcessor = {
   },
   getDocument: function(identifier, filters, params, data, callback) {
     return this.streamDocument(identifier, filters, params, data, function(document) {
-      callback(response);
+      callback(document);
       return false;
     });
   },
@@ -56,12 +57,12 @@ export var HamProcessor = {
     return chan
   },
   registerSchema: function(identifier, schema) {
-    schemas[identifier] = schema;
+    this.schemas[identifier] = schema;
   },
   getLink: function(identifierOrDocument, filters) {
     var links = null;
     if (typeof identifierOrDocument == "string") {
-      var schema = schemas[identifierOrDocument];
+      var schema = this.schemas[identifierOrDocument];
       //TODO get link defs for schema through schema definition
       links = schema.links
     } else {
@@ -88,14 +89,16 @@ export var HamProcessor = {
       dissocIn(self.channels, [url, method, rel, subId])
     }
   },
+  parseResponse: function(response) {
+    return JSON.parse(response.body)
+  },
   callURI: function(url, method, rel, data, callback) {
     var self = this;
     doRequest(url, method, data, function(response) {
       //TODO if response is 500 then simply push to callback
       var contentType = response.headers['Content-Type'],
           profileURI = _.first(self.regexProfileURI.matches(contentType)),
-          //TODO decouple parsing
-          document = JSON.parse(response.body);
+          document = self.parseResponse(response);
 
       document.__meta = {
         timestamp: new Date().getTime(),
@@ -146,9 +149,25 @@ export function Ham(props) {
       return document.status == "success"
     },
     resolveInstancesUrlFromDetailUrl: function(url) {
-      //TODO iterate through known schemas/links
-      return null
-      return this.getLink(null, {rel: "instances", method: "GET"})
+      var found_link = null,
+          params = null;
+      _.each(this.schemas, function(schema, ident) {
+        if (found_link) return false
+        _.each(schema.links, function(link) {
+          //url match href pattern and populate params
+          var matcher = renderUrlMatcher(link),
+              matches = matcher.match(url);
+          if (matches) {
+            found_link = link
+            //TODO
+            params = {} //matches
+            return false
+          }
+        })
+      })
+      if (found_link) {
+        return renderUrl(found_link, params)
+      }
     },
     updateCache: function(url, method, rel, document) {
       if (method == "GET") {
@@ -163,8 +182,8 @@ export function Ham(props) {
           var instances = this.rootObject(instancesDocument),
               detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
               path = this.splitURIptr(instances.__meta.uri);
-          instances = _.filter(instance, function(instance) {
-            return renderURL(detailLink, instance) != url
+          instances = _.filter(instances, function(instance) {
+            return renderUrl(detailLink, instance) != url
           })
           assocIn(instancesDocument, path, instances)
           this.publishURI(instancesUrl, "GET", "instances", instancesDocument)
@@ -191,6 +210,18 @@ export function Ham(props) {
         }
       }
       return false
+    },
+    populateSchemasFromUri: function(url) {
+      var chan = Channel(),
+          self = this;
+      doRequest(url, "GET", null, function(response) {
+        var schemas = self.parseResponse(response)
+        _.each(schemas, function(schema, key) {
+          self.registerSchema(key, schema)
+        });
+        chan.send(schemas)
+      });
+      return chan
     }
   }, props);
 }
