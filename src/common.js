@@ -1,49 +1,53 @@
 import _ from 'lodash';
-//TODO which library do I use?
 import reqwest from 'reqwest';
-//Things I should find libraries for
+
+//Holds things I should find libraries for
 
 
 function async(func) {
-  var args = [func, 1]
+  var args = [func, 1];
   args.push.apply(args, _.toArray(arguments).slice(1))
-  setTimeout.apply(args)
+  window.setTimeout.apply(window, args)
 }
 
 export function Channel(props) {
-  return _.extend({}, {
+  var self = _.extend({}, {
     _queue: [],
     send: function(data) {
-      if (!this.callback) {
-        this._queue.push(data)
+      if (!self.callback) {
+        self._queue.push(data)
         return;
       }
-      async(this.doSend, data)
+      async(self.doSend, data)
     },
     doSend: function(data) {
-      var response = this.callback(data);
+      var response = self.callback(data);
       if (response === false) {
-        this.close()
+        self.close()
       }
       return response
     },
     doQueue: function() {
-      _.each(this._queue, this.send)
-      this._queue = null;
+      _.each(self._queue, function(data) {
+        self.doSend(data)
+      })
+      self._queue = [];
     },
     bind: function(callback) {
-      this.callback = callback
-      async(this.doQueue)
+      self.callback = callback
+      async(self.doQueue)
     },
     close: function() {
-      if(!this.closed) {
-        this._queue = null;
-        this.closed = true;
-        this.onClose()
+      if(!self.closed) {
+        self._queue = null;
+        self.callback = null;
+        self.closed = true;
+        self.onClose()
       }
     },
     onClose: function() {}
   }, props)
+  return self;
 }
 
 export var urlTemplatePattern = /\{([^\{\}]*)\}/;
@@ -58,7 +62,7 @@ export function renderUrl(link, params) {
 
 export function renderUrlMatcher(link) {
   var matchS = link.href,
-      parts = urlTemplatePattern.match(matchS);
+      parts = matchS.match(urlTemplatePattern);
   _.each(parts, function(val) {
     matchS.replace("{"+val+"}", "(?P<"+val+">[\w\d]+)")
   })
@@ -104,12 +108,14 @@ export function getIn(struct, path) {
   }
 }
 
-export function doRequest(url, method, data, callback) {
+export function doRequest(url, method, headers, data, callback) {
   var r = reqwest({
     url: url,
     method: method,
-    data: data,
+    data: (data && method != "GET") && JSON.stringify(data) || null,
     contentType: 'application/json',
+    headers: headers,
+    type: 'json',
     withCredentials: true,
     success: function(payload) {
       var response = {

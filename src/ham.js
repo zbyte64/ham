@@ -52,8 +52,9 @@ export var HamProcessor = {
   openChannel: function(identifier, filters, params, data) {
     var link = this.getLink(identifier, filters),
         url = renderUrl(link, params),
+        method = link.method && link.method.toUpperCase() || "GET",
         chan = Channel();
-    this.subscribeURI(url, link.mehod, link.rel, data, chan)
+    this.subscribeURI(url, method, link.rel, data, chan)
     return chan
   },
   registerSchema: function(identifier, schema) {
@@ -64,7 +65,11 @@ export var HamProcessor = {
     if (typeof identifierOrDocument == "string") {
       var schema = this.schemas[identifierOrDocument];
       //TODO get link defs for schema through schema definition
-      links = schema.links
+      if (!schema) {
+        console.log("failed to find schema:", identifierOrDocument, this.schemas)
+      } else {
+        links = schema.links
+      }
     } else {
       //TODO get links from document by processing schema
       var schema = identifierOrDocument.__meta.schema || {};
@@ -94,10 +99,10 @@ export var HamProcessor = {
   },
   callURI: function(url, method, rel, data, callback) {
     var self = this;
-    doRequest(url, method, data, function(response) {
+    doRequest(url, method, self.headers, data, function(response) {
       //TODO if response is 500 then simply push to callback
-      var contentType = response.headers['Content-Type'],
-          profileURI = _.first(self.regexProfileURI.matches(contentType)),
+      var contentType = response.headers['Content-Type'] || "",
+          profileURI = _.last(contentType.match(self.regexProfileURI)),
           document = self.parseResponse(response);
 
       document.__meta = {
@@ -135,7 +140,8 @@ export var HamProcessor = {
   },
   sendCache: function() {
     //no-op
-  }
+  },
+  headers: {}
 }
 
 export function Ham(props) {
@@ -156,7 +162,7 @@ export function Ham(props) {
         _.each(schema.links, function(link) {
           //url match href pattern and populate params
           var matcher = renderUrlMatcher(link),
-              matches = matcher.match(url);
+              matches = url.match(matcher);
           if (matches) {
             found_link = link
             //TODO
@@ -214,7 +220,7 @@ export function Ham(props) {
     populateSchemasFromUri: function(url) {
       var chan = Channel(),
           self = this;
-      doRequest(url, "GET", null, function(response) {
+      doRequest(url, "GET", this.headers, null, function(response) {
         var schemas = self.parseResponse(response)
         _.each(schemas, function(schema, key) {
           self.registerSchema(key, schema)
