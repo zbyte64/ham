@@ -4,6 +4,38 @@ var reqwest = require("reqwest")["default"] || require("reqwest");
 
 //Holds things I should find libraries for
 
+var MetaArray = function() {
+  var arr = []
+  arr.push.apply(arr, arguments)
+  arr.__proto__ = MetaArray.prototype
+  return arr;
+};
+exports.MetaArray = MetaArray;
+MetaArray.prototype = new Array;
+
+MetaArray.prototype.setMeta = function(meta) {
+  this.__meta = _.extend({} || this.__meta, meta)
+};
+
+MetaArray.prototype.getMeta = function() {
+  return this.__meta || {}
+};
+
+var MetaObject = function() {
+  var obj = _.extend({}, arguments[0] || {})
+  obj.__proto__ = MetaObject.prototype
+  return obj;
+};
+exports.MetaObject = MetaObject;
+MetaObject.prototype = new Object;
+
+MetaObject.prototype.setMeta = function(meta) {
+  this.__meta = _.extend({} || this.__meta, meta)
+};
+
+MetaObject.prototype.getMeta = function() {
+  return this.__meta || {}
+};
 
 function async(func) {
   var args = [func, 1];
@@ -131,6 +163,8 @@ exports.doRequest = doRequest;;"use strict";
 var _ = require("lodash")["default"] || require("lodash");
 var Channel = require("/common").Channel;
 var renderUrl = require("/common").renderUrl;
+var MetaArray = require("/common").MetaArray;
+var MetaObject = require("/common").MetaObject;
 var renderUrlMatcher = require("/common").renderUrlMatcher;
 var assocIn = require("/common").assocIn;
 var dissocIn = require("/common").dissocIn;
@@ -146,14 +180,34 @@ var HamProcessor = {
   splitURIptr: function(ptr) {
     return _.filter(_.last(ptr.split('#', 2)).split('/'))
   },
+  setMeta: function(document, meta) {
+    if (document instanceof MetaArray ||
+        document instanceof MetaObject) {
+      document.setMeta(meta)
+      return document
+    } else if (document instanceof Array) {
+      var da = new MetaArray();
+      da.push.apply(da, document)
+      da.setMeta(meta)
+      return da
+    } else if (document instanceof Object) {
+      var da = new MetaObject(document);
+      da.setMeta(meta)
+      return da
+    }
+    console.log("Unrecognized", document)
+  },
+  getMeta: function(document) {
+    return document.getMeta && document.getMeta() || {}
+  },
   subObject: function(document, ptr) {
     var parts = this.splitURIptr(ptr),
-        docMeta = document.__meta,
+        docMeta = this.getMeta(document),
         subObject = getIn(document, parts);
-    subObject.__meta = {
+    subObject = this.setMeta(subObject, {
         timestamp: docMeta.timestamp,
         uri: docMeta.uri + ptr
-      }
+      })
 
       /*
       if (false) {
@@ -196,10 +250,13 @@ var HamProcessor = {
   registerSchema: function(identifier, schema) {
     this.schemas[identifier] = schema;
   },
+  getSchema: function(identifier) {
+    return this.schemas[identifier]
+  },
   getLink: function(identifierOrDocument, filters) {
     var links = null;
     if (typeof identifierOrDocument == "string") {
-      var schema = this.schemas[identifierOrDocument];
+      var schema = this.getSchema(identifierOrDocument);
       //TODO get link defs for schema through schema definition
       if (!schema) {
         console.log("failed to find schema:", identifierOrDocument, this.schemas)
@@ -208,7 +265,7 @@ var HamProcessor = {
       }
     } else {
       //TODO get links from document by processing schema
-      var schema = identifierOrDocument.__meta.schema || {};
+      var schema = this.getMeta(identifierOrDocument).schema || {};
       links = _.merge([], schema.links, identifierOrDocument.links)
     }
     links = _.where(links, filters)
@@ -241,16 +298,18 @@ var HamProcessor = {
           profileURI = _.last(contentType.match(self.regexProfileURI)),
           document = self.parseResponse(response);
 
-      document.__meta = {
+      document = self.setMeta(document, {
         timestamp: new Date().getTime(),
         uri: url
-      }
+      })
 
       if (profileURI) {
         //TODO if profileURI has not been seen, fetch it
-        var schema = self.schemas[profileURI]
-        document.__meta.schema = schema
-        document.__meta.schema_url = profileURI
+        var schema = self.getSchema(profileURI)
+        document.setMeta({
+          schema: schema,
+          schema_url: profileURI
+        })
       }
       //CONSIDER: document may be a redirect GET from a POST or PUT
       self.publishURI(url, method, rel, document);
@@ -287,6 +346,7 @@ function Ham(props) {
     objects: {},
     recycle_bin: {},
     channels: {},
+    schema_sources: {},
     checkSuccess: function(document) {
       return document.status == "success"
     },
@@ -323,7 +383,7 @@ function Ham(props) {
         if (instancesDocument) {
           var instances = this.rootObject(instancesDocument),
               detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
-              path = this.splitURIptr(instances.__meta.uri);
+              path = this.splitURIptr(this.getMeta(instances).uri);
           instances = _.filter(instances, function(instance) {
             return renderUrl(detailLink, instance) != url
           })
@@ -346,7 +406,7 @@ function Ham(props) {
       var cache = getIn(this.objects, [url, method, rel]);
       if (cache) {
         chan.send(cache)
-        var time_since = (new Date().getTime()) - cache.__meta.timestamp;
+        var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
         if (method == "GET" && time_since < this.cacheTime) {
           return true;
         }
@@ -358,8 +418,10 @@ function Ham(props) {
           self = this;
       doRequest(url, "GET", this.headers, null, function(response) {
         var schemas = self.parseResponse(response)
+        self.schema_sources[url] = schemas;
         _.each(schemas, function(schema, key) {
           self.registerSchema(key, schema)
+          self.registerSchema(url + "#/" + key, schema)
         });
         chan.send(schemas)
       });

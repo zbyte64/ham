@@ -3,6 +3,38 @@ import reqwest from 'reqwest';
 
 //Holds things I should find libraries for
 
+export var MetaArray = function() {
+  var arr = []
+  arr.push.apply(arr, arguments)
+  arr.__proto__ = MetaArray.prototype
+  return arr;
+};
+
+MetaArray.prototype = new Array;
+
+MetaArray.prototype.setMeta = function(meta) {
+  this.__meta = _.extend({} || this.__meta, meta)
+};
+
+MetaArray.prototype.getMeta = function() {
+  return this.__meta || {}
+};
+
+export var MetaObject = function() {
+  var obj = _.extend({}, arguments[0] || {})
+  obj.__proto__ = MetaObject.prototype
+  return obj;
+};
+
+MetaObject.prototype = new Object;
+
+MetaObject.prototype.setMeta = function(meta) {
+  this.__meta = _.extend({} || this.__meta, meta)
+};
+
+MetaObject.prototype.getMeta = function() {
+  return this.__meta || {}
+};
 
 function async(func) {
   var args = [func, 1];
