@@ -1,6 +1,8 @@
 {
   "name": "ham",
+  "description": "Hypermedia Abstraction Mapper (Client)",
   "version": "0.0.1",
+  "license" : "BSD-3-Clause",
   "repository": {
     "type": "git",
     "url": "git://github.com/zbyte64/ham.git"
@@ -16,5 +18,11 @@
     "grunt-contrib-uglify": "~0.4.0",
     "grunt-contrib-concat": "~0.4.0",
     "grunt-contrib-clean": "~0.5.0"
-  }
+  },
+  "files" : [
+    "dist/ham.min.js",
+    "dist/ham.amd.js",
+    "dist/ham.js"
+  ],
+  "main": "ham.js"
 }

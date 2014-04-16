@@ -36,7 +36,7 @@ module.exports = function(grunt) {
         src: [
           'dist/cjs/**/*.js'
         ],
-        dest: 'dist/ham.cjs.js'
+        dest: 'dist/ham.js'
       },
       amd: {
         src: [
