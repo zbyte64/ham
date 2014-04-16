@@ -41,8 +41,8 @@ module.exports = function(grunt) {
       },
       amd: {
         options: {
-          banner: '/*! <%= pkg.name %> <%= grunt.template.today("yyyy-mm-dd") %> */\n' +
-           'define("ham", ["/ham"], function(ham) {return ham});\n'
+          banner: '/*! <%= pkg.name %> <%= grunt.template.today("yyyy-mm-dd") %> */\n',
+          footer: 'define("ham", ["/ham"], function(ham) {return ham});\n'
         },
         src: [
           'dist/amd/**/*.js'
