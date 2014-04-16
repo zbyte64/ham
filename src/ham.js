@@ -60,7 +60,7 @@ export var HamProcessor = {
   },
   getDocument: function(identifier, filters, params, data, callback) {
     return this.streamDocument(identifier, filters, params, data, function(document) {
-      callback(document);
+      if (callback) callback(document);
       return false;
     });
   },
