@@ -33,12 +33,17 @@ module.exports = function(grunt) {
         separator: ';',
       },
       cjs: {
+
         src: [
           'dist/cjs/**/*.js'
         ],
         dest: 'dist/ham.js'
       },
       amd: {
+        options: {
+          banner: '/*! <%= pkg.name %> <%= grunt.template.today("yyyy-mm-dd") %> */\n' +
+           'define("ham", ["/ham"], function(ham) {return ham});\n'
+        },
         src: [
           'dist/amd/**/*.js'
         ],
@@ -46,9 +51,7 @@ module.exports = function(grunt) {
       }
     },
     uglify: {
-      options: {
-        banner: '/*! <%= pkg.name %> <%= grunt.template.today("yyyy-mm-dd") %> */\n'
-      },
+
       ham: {
         src: 'dist/ham.amd.js',
         dest: 'dist/ham.min.js'

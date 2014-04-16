@@ -1,3 +1,5 @@
+/*! ham 2014-04-15 */
+define("ham", ["/ham"], function(ham) {return ham});
 define("/common", 
   ["lodash","reqwest","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
