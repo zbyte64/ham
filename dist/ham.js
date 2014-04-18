@@ -207,7 +207,7 @@ var HamProcessor = {
     subObject = this.setMeta(subObject, {
         timestamp: docMeta.timestamp,
         uri: docMeta.uri + ptr
-      })
+    })
 
       /*
       if (false) {
@@ -230,7 +230,7 @@ var HamProcessor = {
   },
   getDocument: function(identifier, filters, params, data, callback) {
     return this.streamDocument(identifier, filters, params, data, function(document) {
-      callback(document);
+      if (callback) callback(document);
       return false;
     });
   },

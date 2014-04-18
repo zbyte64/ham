@@ -37,7 +37,7 @@ export var HamProcessor = {
     subObject = this.setMeta(subObject, {
         timestamp: docMeta.timestamp,
         uri: docMeta.uri + ptr
-      })
+    })
 
       /*
       if (false) {

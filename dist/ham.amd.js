@@ -1,4 +1,4 @@
-/*! ham 2014-04-16 */
+/*! ham 2014-04-18 */
 define("/common", 
   ["lodash","reqwest","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -215,7 +215,7 @@ define("/common",
         subObject = this.setMeta(subObject, {
             timestamp: docMeta.timestamp,
             uri: docMeta.uri + ptr
-          })
+        })
 
           /*
           if (false) {
@@ -238,7 +238,7 @@ define("/common",
       },
       getDocument: function(identifier, filters, params, data, callback) {
         return this.streamDocument(identifier, filters, params, data, function(document) {
-          callback(document);
+          if (callback) callback(document);
           return false;
         });
       },
