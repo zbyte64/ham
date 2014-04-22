@@ -1,5 +1,6 @@
 import _ from 'lodash';
-import reqwest from 'reqwest';
+import request from 'superagent';
+import async from 'async';
 
 //Holds things I should find libraries for
 
@@ -36,53 +37,39 @@ MetaObject.prototype.getMeta = function() {
   return this.__meta || {}
 };
 
-function async(func) {
-  var args = [func, 1];
-  args.push.apply(args, _.toArray(arguments).slice(1))
-  window.setTimeout.apply(window, args)
-}
-
-export function Channel(props) {
+export function Channel() {
   var self = _.extend({}, {
-    _queue: [],
+    _backlog: [],
+    queue: null,
     send: function(data) {
-      if (!self.callback) {
-        self._queue.push(data)
-        return;
+      if (!self.queue) {
+        self._backlog.push(data)
+      } else {
+        self.queue.push(data)
       }
-      async(self.doSend, data)
     },
-    doSend: function(data) {
-      var response = self.callback(data);
-      if (response === false) {
-        self.close()
-      }
-      return response
-    },
-    doQueue: function() {
-      _.each(self._queue, function(data) {
-        self.doSend(data)
+    bind: function(f) {
+      self.queue = async.queue(function(task, callback) {
+        f(task)
+        callback()
       })
-      self._queue = [];
-    },
-    bind: function(callback) {
-      self.callback = callback
-      async(self.doQueue)
+      self.queue.push(self._backlog)
+      self._backlog = null
     },
     close: function() {
       if(!self.closed) {
-        self._queue = null;
-        self.callback = null;
+        self.queue = null;
+        self._backlog = null;
         self.closed = true;
         self.onClose()
       }
     },
     onClose: function() {}
-  }, props)
+  })
   return self;
 }
 
-export var urlTemplatePattern = /\{([^\{\}]*)\}/;
+export var urlTemplatePattern = /\{([^\{\}]*)\}/g;
 
 export function renderUrl(link, params) {
   var url = link.href;
@@ -92,13 +79,31 @@ export function renderUrl(link, params) {
   return url;
 }
 
-export function renderUrlMatcher(link) {
+export function renderUrlRegexp(link) {
   var matchS = link.href,
-      parts = matchS.match(urlTemplatePattern);
+      parts = matchS.match(urlTemplatePattern),
+      args = [];
+  matchS = matchS.replace("/", "\\/", "g")
   _.each(parts, function(val) {
-    matchS.replace("{"+val+"}", "(?P<"+val+">[\w\d]+)")
+    //because javascript includes the brackets (its not like you wanted real regexp after all)
+    matchS = matchS.replace(val, "([^\\/]*)")
+    args.push(val.substr(1, val.length-2))
   })
-  return new RegExp(matchS);
+  return [new RegExp(matchS), args]
+}
+
+export function renderUrlMatcher(link) {
+  var res = renderUrlRegexp(link),
+      matcher = res[0],
+      parts = res[1];
+  return function(url) {
+    var values = _.rest(url.match(matcher)),
+        ret = {};
+    _.each(values, function(val, index) {
+      ret[parts[index]] = val
+    })
+    return _.size(ret) && ret || [values, matcher, url];
+  }
 }
 
 export function assocIn(struct, path, value) {
@@ -141,20 +146,14 @@ export function getIn(struct, path) {
 }
 
 export function doRequest(url, method, headers, data, callback) {
-  var r = reqwest({
-    url: url,
-    method: method,
-    data: (data && method != "GET") && JSON.stringify(data) || null,
-    contentType: 'application/json',
-    headers: headers,
-    type: 'json',
-    withCredentials: true,
-    success: function(payload) {
-      var response = {
-        headers: r.request.getAllResponseHeaders(),
-        content: payload
-      }
-      callback(response)
+  var req = request(method, url).withCredentials().type('json').accept('json').set(headers)
+  if (data) {
+    if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
+      req.query(data)
+    } else {
+      req.send(JSON.stringify(data))
     }
-  });
+  }
+  req.end(callback);
+  return req
 };

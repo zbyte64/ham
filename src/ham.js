@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import {Channel, renderUrl, MetaArray, MetaObject, renderUrlMatcher, assocIn, dissocIn, getIn, doRequest} from '/common';
+import {Channel, renderUrl, MetaArray, MetaObject, renderUrlMatcher, assocIn, dissocIn, getIn, doRequest} from './common';
 
 
 export var HamProcessor = {
@@ -118,14 +118,13 @@ export var HamProcessor = {
     }
   },
   parseResponse: function(response) {
-    return response.content
+    return response.body
   },
   callURI: function(url, method, rel, data, callback) {
     var self = this;
     doRequest(url, method, self.headers, data, function(response) {
       //TODO if response is 500 then simply push to callback
-      var contentType = response.headers['Content-Type'] || "",
-          profileURI = _.last(contentType.match(self.regexProfileURI)),
+      var profileURI = response.profile,
           document = self.parseResponse(response);
 
       document = self.setMeta(document, {
@@ -141,6 +140,7 @@ export var HamProcessor = {
           schema_url: profileURI
         })
       }
+
       //CONSIDER: document may be a redirect GET from a POST or PUT
       self.publishURI(url, method, rel, document);
       if (callback) callback(document);
@@ -188,17 +188,18 @@ export function Ham(props) {
         _.each(schema.links, function(link) {
           //url match href pattern and populate params
           var matcher = renderUrlMatcher(link),
-              matches = url.match(matcher);
+              matches = matcher(url);
           if (matches) {
             found_link = link
-            //TODO
-            params = {} //matches
+            params = matches
             return false
           }
         })
       })
       if (found_link) {
         return renderUrl(found_link, params)
+      } else {
+        return false;
       }
     },
     updateCache: function(url, method, rel, document) {

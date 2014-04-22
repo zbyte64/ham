@@ -1,6 +1,7 @@
 "use strict";
 var _ = require("lodash")["default"] || require("lodash");
-var reqwest = require("reqwest")["default"] || require("reqwest");
+var request = require("superagent")["default"] || require("superagent");
+var async = require("async")["default"] || require("async");
 
 //Holds things I should find libraries for
 
@@ -37,53 +38,39 @@ MetaObject.prototype.getMeta = function() {
   return this.__meta || {}
 };
 
-function async(func) {
-  var args = [func, 1];
-  args.push.apply(args, _.toArray(arguments).slice(1))
-  window.setTimeout.apply(window, args)
-}
-
-function Channel(props) {
+function Channel() {
   var self = _.extend({}, {
-    _queue: [],
+    _backlog: [],
+    queue: null,
     send: function(data) {
-      if (!self.callback) {
-        self._queue.push(data)
-        return;
+      if (!self.queue) {
+        self._backlog.push(data)
+      } else {
+        self.queue.push(data)
       }
-      async(self.doSend, data)
     },
-    doSend: function(data) {
-      var response = self.callback(data);
-      if (response === false) {
-        self.close()
-      }
-      return response
-    },
-    doQueue: function() {
-      _.each(self._queue, function(data) {
-        self.doSend(data)
+    bind: function(f) {
+      self.queue = async.queue(function(task, callback) {
+        f(task)
+        callback()
       })
-      self._queue = [];
-    },
-    bind: function(callback) {
-      self.callback = callback
-      async(self.doQueue)
+      self.queue.push(self._backlog)
+      self._backlog = null
     },
     close: function() {
       if(!self.closed) {
-        self._queue = null;
-        self.callback = null;
+        self.queue = null;
+        self._backlog = null;
         self.closed = true;
         self.onClose()
       }
     },
     onClose: function() {}
-  }, props)
+  })
   return self;
 }
 
-exports.Channel = Channel;var urlTemplatePattern = /\{([^\{\}]*)\}/;
+exports.Channel = Channel;var urlTemplatePattern = /\{([^\{\}]*)\}/g;
 exports.urlTemplatePattern = urlTemplatePattern;
 function renderUrl(link, params) {
   var url = link.href;
@@ -93,13 +80,31 @@ function renderUrl(link, params) {
   return url;
 }
 
-exports.renderUrl = renderUrl;function renderUrlMatcher(link) {
+exports.renderUrl = renderUrl;function renderUrlRegexp(link) {
   var matchS = link.href,
-      parts = matchS.match(urlTemplatePattern);
+      parts = matchS.match(urlTemplatePattern),
+      args = [];
+  matchS = matchS.replace("/", "\\/", "g")
   _.each(parts, function(val) {
-    matchS.replace("{"+val+"}", "(?P<"+val+">[\w\d]+)")
+    //because javascript includes the brackets (its not like you wanted real regexp after all)
+    matchS = matchS.replace(val, "([^\\/]*)")
+    args.push(val.substr(1, val.length-2))
   })
-  return new RegExp(matchS);
+  return [new RegExp(matchS), args]
+}
+
+exports.renderUrlRegexp = renderUrlRegexp;function renderUrlMatcher(link) {
+  var res = renderUrlRegexp(link),
+      matcher = res[0],
+      parts = res[1];
+  return function(url) {
+    var values = _.rest(url.match(matcher)),
+        ret = {};
+    _.each(values, function(val, index) {
+      ret[parts[index]] = val
+    })
+    return _.size(ret) && ret || [values, matcher, url];
+  }
 }
 
 exports.renderUrlMatcher = renderUrlMatcher;function assocIn(struct, path, value) {
@@ -142,34 +147,28 @@ exports.dissocIn = dissocIn;function getIn(struct, path) {
 }
 
 exports.getIn = getIn;function doRequest(url, method, headers, data, callback) {
-  var r = reqwest({
-    url: url,
-    method: method,
-    data: (data && method != "GET") && JSON.stringify(data) || null,
-    contentType: 'application/json',
-    headers: headers,
-    type: 'json',
-    withCredentials: true,
-    success: function(payload) {
-      var response = {
-        headers: r.request.getAllResponseHeaders(),
-        content: payload
-      }
-      callback(response)
+  var req = request(method, url).withCredentials().type('json').accept('json').set(headers)
+  if (data) {
+    if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
+      req.query(data)
+    } else {
+      req.send(JSON.stringify(data))
     }
-  });
+  }
+  req.end(callback);
+  return req
 };
 exports.doRequest = doRequest;;"use strict";
 var _ = require("lodash")["default"] || require("lodash");
-var Channel = require("/common").Channel;
-var renderUrl = require("/common").renderUrl;
-var MetaArray = require("/common").MetaArray;
-var MetaObject = require("/common").MetaObject;
-var renderUrlMatcher = require("/common").renderUrlMatcher;
-var assocIn = require("/common").assocIn;
-var dissocIn = require("/common").dissocIn;
-var getIn = require("/common").getIn;
-var doRequest = require("/common").doRequest;
+var Channel = require("./common").Channel;
+var renderUrl = require("./common").renderUrl;
+var MetaArray = require("./common").MetaArray;
+var MetaObject = require("./common").MetaObject;
+var renderUrlMatcher = require("./common").renderUrlMatcher;
+var assocIn = require("./common").assocIn;
+var dissocIn = require("./common").dissocIn;
+var getIn = require("./common").getIn;
+var doRequest = require("./common").doRequest;
 
 
 var HamProcessor = {
@@ -288,14 +287,13 @@ var HamProcessor = {
     }
   },
   parseResponse: function(response) {
-    return response.content
+    return response.body
   },
   callURI: function(url, method, rel, data, callback) {
     var self = this;
     doRequest(url, method, self.headers, data, function(response) {
       //TODO if response is 500 then simply push to callback
-      var contentType = response.headers['Content-Type'] || "",
-          profileURI = _.last(contentType.match(self.regexProfileURI)),
+      var profileURI = response.profile,
           document = self.parseResponse(response);
 
       document = self.setMeta(document, {
@@ -311,6 +309,7 @@ var HamProcessor = {
           schema_url: profileURI
         })
       }
+
       //CONSIDER: document may be a redirect GET from a POST or PUT
       self.publishURI(url, method, rel, document);
       if (callback) callback(document);
@@ -358,17 +357,18 @@ function Ham(props) {
         _.each(schema.links, function(link) {
           //url match href pattern and populate params
           var matcher = renderUrlMatcher(link),
-              matches = url.match(matcher);
+              matches = matcher(url);
           if (matches) {
             found_link = link
-            //TODO
-            params = {} //matches
+            params = matches
             return false
           }
         })
       })
       if (found_link) {
         return renderUrl(found_link, params)
+      } else {
+        return false;
       }
     },
     updateCache: function(url, method, rel, document) {

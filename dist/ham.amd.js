@@ -1,10 +1,11 @@
-/*! ham 2014-04-18 */
+/*! ham 2014-04-22 */
 define("/common", 
-  ["lodash","reqwest","exports"],
-  function(__dependency1__, __dependency2__, __exports__) {
+  ["lodash","superagent","async","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
     var _ = __dependency1__["default"] || __dependency1__;
-    var reqwest = __dependency2__["default"] || __dependency2__;
+    var request = __dependency2__["default"] || __dependency2__;
+    var async = __dependency3__["default"] || __dependency3__;
 
     //Holds things I should find libraries for
 
@@ -41,53 +42,39 @@ define("/common",
       return this.__meta || {}
     };
 
-    function async(func) {
-      var args = [func, 1];
-      args.push.apply(args, _.toArray(arguments).slice(1))
-      window.setTimeout.apply(window, args)
-    }
-
-    function Channel(props) {
+    function Channel() {
       var self = _.extend({}, {
-        _queue: [],
+        _backlog: [],
+        queue: null,
         send: function(data) {
-          if (!self.callback) {
-            self._queue.push(data)
-            return;
+          if (!self.queue) {
+            self._backlog.push(data)
+          } else {
+            self.queue.push(data)
           }
-          async(self.doSend, data)
         },
-        doSend: function(data) {
-          var response = self.callback(data);
-          if (response === false) {
-            self.close()
-          }
-          return response
-        },
-        doQueue: function() {
-          _.each(self._queue, function(data) {
-            self.doSend(data)
+        bind: function(f) {
+          self.queue = async.queue(function(task, callback) {
+            f(task)
+            callback()
           })
-          self._queue = [];
-        },
-        bind: function(callback) {
-          self.callback = callback
-          async(self.doQueue)
+          self.queue.push(self._backlog)
+          self._backlog = null
         },
         close: function() {
           if(!self.closed) {
-            self._queue = null;
-            self.callback = null;
+            self.queue = null;
+            self._backlog = null;
             self.closed = true;
             self.onClose()
           }
         },
         onClose: function() {}
-      }, props)
+      })
       return self;
     }
 
-    __exports__.Channel = Channel;var urlTemplatePattern = /\{([^\{\}]*)\}/;
+    __exports__.Channel = Channel;var urlTemplatePattern = /\{([^\{\}]*)\}/g;
     __exports__.urlTemplatePattern = urlTemplatePattern;
     function renderUrl(link, params) {
       var url = link.href;
@@ -97,13 +84,31 @@ define("/common",
       return url;
     }
 
-    __exports__.renderUrl = renderUrl;function renderUrlMatcher(link) {
+    __exports__.renderUrl = renderUrl;function renderUrlRegexp(link) {
       var matchS = link.href,
-          parts = matchS.match(urlTemplatePattern);
+          parts = matchS.match(urlTemplatePattern),
+          args = [];
+      matchS = matchS.replace("/", "\\/", "g")
       _.each(parts, function(val) {
-        matchS.replace("{"+val+"}", "(?P<"+val+">[\w\d]+)")
+        //because javascript includes the brackets (its not like you wanted real regexp after all)
+        matchS = matchS.replace(val, "([^\\/]*)")
+        args.push(val.substr(1, val.length-2))
       })
-      return new RegExp(matchS);
+      return [new RegExp(matchS), args]
+    }
+
+    __exports__.renderUrlRegexp = renderUrlRegexp;function renderUrlMatcher(link) {
+      var res = renderUrlRegexp(link),
+          matcher = res[0],
+          parts = res[1];
+      return function(url) {
+        var values = _.rest(url.match(matcher)),
+            ret = {};
+        _.each(values, function(val, index) {
+          ret[parts[index]] = val
+        })
+        return _.size(ret) && ret || [values, matcher, url];
+      }
     }
 
     __exports__.renderUrlMatcher = renderUrlMatcher;function assocIn(struct, path, value) {
@@ -146,26 +151,20 @@ define("/common",
     }
 
     __exports__.getIn = getIn;function doRequest(url, method, headers, data, callback) {
-      var r = reqwest({
-        url: url,
-        method: method,
-        data: (data && method != "GET") && JSON.stringify(data) || null,
-        contentType: 'application/json',
-        headers: headers,
-        type: 'json',
-        withCredentials: true,
-        success: function(payload) {
-          var response = {
-            headers: r.request.getAllResponseHeaders(),
-            content: payload
-          }
-          callback(response)
+      var req = request(method, url).withCredentials().type('json').accept('json').set(headers)
+      if (data) {
+        if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
+          req.query(data)
+        } else {
+          req.send(JSON.stringify(data))
         }
-      });
+      }
+      req.end(callback);
+      return req
     };
     __exports__.doRequest = doRequest;
   });;define("/ham", 
-  ["lodash","/common","exports"],
+  ["lodash","./common","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var _ = __dependency1__["default"] || __dependency1__;
@@ -296,14 +295,13 @@ define("/common",
         }
       },
       parseResponse: function(response) {
-        return response.content
+        return response.body
       },
       callURI: function(url, method, rel, data, callback) {
         var self = this;
         doRequest(url, method, self.headers, data, function(response) {
           //TODO if response is 500 then simply push to callback
-          var contentType = response.headers['Content-Type'] || "",
-              profileURI = _.last(contentType.match(self.regexProfileURI)),
+          var profileURI = response.profile,
               document = self.parseResponse(response);
 
           document = self.setMeta(document, {
@@ -319,6 +317,7 @@ define("/common",
               schema_url: profileURI
             })
           }
+
           //CONSIDER: document may be a redirect GET from a POST or PUT
           self.publishURI(url, method, rel, document);
           if (callback) callback(document);
@@ -366,17 +365,18 @@ define("/common",
             _.each(schema.links, function(link) {
               //url match href pattern and populate params
               var matcher = renderUrlMatcher(link),
-                  matches = url.match(matcher);
+                  matches = matcher(url);
               if (matches) {
                 found_link = link
-                //TODO
-                params = {} //matches
+                params = matches
                 return false
               }
             })
           })
           if (found_link) {
             return renderUrl(found_link, params)
+          } else {
+            return false;
           }
         },
         updateCache: function(url, method, rel, document) {
