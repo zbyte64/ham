@@ -1,5 +1,7 @@
 "use strict";
 
+var _ = require("lodash");
+
 var Calculator = function Calculator() {
   return {
     add:function add(firstNum, secondNum) {
@@ -10,6 +12,16 @@ var Calculator = function Calculator() {
 
 describe("common tools", function () {
   var common = require("../dist/cjs/common")
+
+  describe("renderUrl()", function () {
+    it("render url from a link", function () {
+      var link = {rel: "full", href:"/{app}/{id}"};
+      var expectedResult = "/my-app/16"
+      var actualResult = common.renderUrl(link, {app:"my-app", id: "16"});
+
+      expect(actualResult).toEqual(expectedResult);
+    });
+  });
 
   describe("renderUrlMatcher()", function () {
     it("reverses url", function () {
@@ -23,7 +35,7 @@ describe("common tools", function () {
   });
 
   describe("renderUrlRegexp()", function () {
-    it("reverses url", function () {
+    it("generate a linear regexp from a link", function () {
       var link = {rel: "full", href:"/{app}/{id}"};
       var actualResult = common.renderUrlRegexp(link);
       return;
@@ -35,22 +47,26 @@ describe("common tools", function () {
   });
 });
 
-describe("Ham.cache", function () {
-  var ham = require("../dist/cjs/ham")
+describe("Ham", function () {
+  var ham = require("../dist/cjs/ham");
+  var common = require("../dist/cjs/common");
   var client;
   beforeEach(function (){
+    var sprockets = {
+      links: [
+        {rel: "create", method:"POST", href:"/{app}"},
+        {rel: "full", method:"GET", href:"/{app}/{id}"},
+        {rel: "instances", method:"GET", href:"/{app}"}
+      ]
+    };
+    var instances = new common.MetaArray()
+    instances.setMeta({schema: sprockets})
     client = ham.Ham({
       schemas: {
-        sprockets: {
-          links: [
-            {rel: "create", method:"POST", href:"/{app}"},
-            {rel: "full", href:"/{app}/{id}"},
-            {rel: "instances", href:"/{app}"}
-          ]
-        }
+        sprockets: sprockets
       },
       objects: {
-        "/my-app": {"GET": {"instances": []}}
+        "/my-app": {"GET": {"instances": instances}}
       }
     });
   });
@@ -62,13 +78,31 @@ describe("Ham.cache", function () {
     })
   })
 
+  describe("getLink", function() {
+    it("retrieve link from in instances document", function() {
+      var actualResult = client.getLink(client.objects['/my-app'].GET.instances, {rel: "full", method: "GET"})
+      expect(actualResult).toEqual({rel: "full", method:"GET", href:"/{app}/{id}"});
+    })
+  })
+
   describe("updateCache()", function () {
     it("created object is added to instances", function () {
       var document = {id: 12345, name: "test sprocket"};
       client.updateCache("/my-app", "POST", "create", document)
 
-      var actualResult = client.objects["/my-app"].GET.instances,
+      var actualResult = _.toArray(client.objects["/my-app"].GET.instances),
           expectedResult = [document];
+
+      expect(actualResult).toEqual(expectedResult);
+    });
+
+    it("deleted object is removed from instances", function () {
+      var document = {id: 12345, app:"my-app", name: "test sprocket"};
+      client.objects['/my-app'].GET.instances.push(document)
+      client.updateCache("/my-app/12345", "DELETE", "delete", document)
+
+      var actualResult = client.objects["/my-app"].GET.instances,
+          expectedResult = [];
 
       expect(actualResult).toEqual(expectedResult);
     });

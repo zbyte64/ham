@@ -59,6 +59,7 @@ module.exports = function(grunt) {
     jasmine_node: {
       options: {
         forceExit: true,
+        verbose: true,
         match: '.',
         matchall: false,
         extensions: 'js',

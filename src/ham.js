@@ -8,6 +8,7 @@ export var HamProcessor = {
     return this.getLink(document, {rel: 'root'});
   },
   splitURIptr: function(ptr) {
+    if (!ptr) return []
     return _.filter(_.last(ptr.split('#', 2)).split('/'))
   },
   setMeta: function(document, meta) {
@@ -146,8 +147,8 @@ export var HamProcessor = {
       if (callback) callback(document);
     });
   },
-  publishURI: function(url, method, rel, document) {
-    if (!this.checkSuccess(document)) return
+  publishURI: function(url, method, rel, document, success) {
+    if (!success && !this.checkSuccess(document)) return
     this.updateCache(url, method, rel, document)
     //publish to listening channels
     _.each(getIn(this.channels, [url, method, rel], function(chan) {
@@ -177,9 +178,6 @@ export function Ham(props) {
     recycle_bin: {},
     channels: {},
     schema_sources: {},
-    checkSuccess: function(document) {
-      return document.status == "success"
-    },
     resolveInstancesUrlFromDetailUrl: function(url) {
       var found_link = null,
           params = null;
@@ -215,21 +213,25 @@ export function Ham(props) {
           var instances = this.rootObject(instancesDocument),
               detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
               path = this.splitURIptr(this.getMeta(instances).uri);
+          //if (!detailLink) return;
           instances = _.filter(instances, function(instance) {
             return renderUrl(detailLink, instance) != url
           })
-          assocIn(instancesDocument, path, instances)
-          this.publishURI(instancesUrl, "GET", "instances", instancesDocument)
+          if (_.size(path)) {
+            assocIn(instancesDocument, path, instances)
+          } else {
+            instancesDocument = instances
+          }
+          this.publishURI(instancesUrl, "GET", "instances", instancesDocument, true)
         }
       } else if (rel == "create") {
         //add the object to our instances cache
         var root = this.rootObject(document),
-            instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
-            instancesDocument = getIn(this.objects, [instancesUrl, "GET", "instances"]);
+            instancesDocument = getIn(this.objects, [url, "GET", "instances"]);
         if (instancesDocument) {
           var instances = this.rootObject(instancesDocument)
           instances.push(root)
-          this.publishURI(instancesUrl, "GET", "instances", instancesDocument)
+          this.publishURI(url, "GET", "instances", instancesDocument, true)
         }
       }
     },
