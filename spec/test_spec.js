@@ -66,7 +66,7 @@ describe("Ham", function () {
         sprockets: sprockets
       },
       objects: {
-        "/my-app": {"GET": {"instances": instances}}
+        "/my-app": instances
       }
     });
   });
@@ -80,28 +80,46 @@ describe("Ham", function () {
 
   describe("getLink", function() {
     it("retrieve link from in instances document", function() {
-      var actualResult = client.getLink(client.objects['/my-app'].GET.instances, {rel: "full", method: "GET"})
+      var actualResult = client.getLink(client.objects['/my-app'], {rel: "full", method: "GET"})
       expect(actualResult).toEqual({rel: "full", method:"GET", href:"/{app}/{id}"});
     })
   })
 
   describe("updateCache()", function () {
     it("created object is added to instances", function () {
-      var document = {id: 12345, name: "test sprocket"};
-      client.updateCache("/my-app", "POST", "create", document)
+      var document = common.MetaObject({id: 12345, name: "test sprocket"});
+      document.setMeta({
+        action: "GET",
+        uri: "/my-app/12345",
+        schema: client.getSchema('sprockets')
+      })
+      client.updateCache(document)
 
-      var actualResult = _.toArray(client.objects["/my-app"].GET.instances),
+      var actualResult = _.toArray(client.objects["/my-app"]),
           expectedResult = [document];
 
       expect(actualResult).toEqual(expectedResult);
     });
 
     it("deleted object is removed from instances", function () {
-      var document = {id: 12345, app:"my-app", name: "test sprocket"};
-      client.objects['/my-app'].GET.instances.push(document)
-      client.updateCache("/my-app/12345", "DELETE", "delete", document)
+      var document = common.MetaObject({id: 12345, name: "test sprocket"});
+      document.setMeta({
+        action: "GET",
+        uri: "/my-app/12345",
+        schema: client.getSchema('sprockets')
+      })
+      client.objects['/my-app'].push(document)
 
-      var actualResult = client.objects["/my-app"].GET.instances,
+      var delete_document = common.MetaObject({});
+      delete_document.setMeta({
+        action: "DELETE",
+        uri: "/my-app/12345",
+        schema: client.getSchema('sprockets')
+      })
+      //
+      client.updateCache(delete_document)
+
+      var actualResult = client.objects["/my-app"],
           expectedResult = [];
 
       expect(actualResult).toEqual(expectedResult);

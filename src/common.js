@@ -102,7 +102,7 @@ export function renderUrlMatcher(link) {
     _.each(values, function(val, index) {
       ret[parts[index]] = val
     })
-    return _.size(ret) && ret || [values, matcher, url];
+    return _.size(ret) && ret || null;
   }
 }
 
@@ -145,8 +145,8 @@ export function getIn(struct, path) {
   }
 }
 
-export function doRequest(url, method, headers, data, callback) {
-  var req = request(method, url).withCredentials().type('json').accept('json').set(headers)
+function innerRequest(url, method, headers, data, callback) {
+  var req = request(method, url).withCredentials().type('json').accept('json').set(headers).redirects(0)
   if (data) {
     if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
       req.query(data)
@@ -156,4 +156,19 @@ export function doRequest(url, method, headers, data, callback) {
   }
   req.end(callback);
   return req
+};
+
+export function doRequest(url, method, headers, data, callback) {
+  function handler(response) {
+    if (response.status >= 300 && response.status < 400 && response.headers.Location) {
+      if (response.status != 307) {
+        method = "GET"
+      }
+      //TODO allow for more then 1 redirect
+      innerRequest(response.headers.Location, method, headers, null, callback)
+    } else {
+      callback(response)
+    }
+  }
+  return innerRequest(url, method, headers, data, handler)
 };

@@ -25,6 +25,11 @@ export var HamProcessor = {
       var da = new MetaObject(document);
       da.setMeta(meta)
       return da
+    } else if (document == null) {
+      //TODO something with a false evaluation?
+      var da = new MetaObject();
+      da.setMeta(meta)
+      return da
     }
     console.log("Unrecognized", document)
   },
@@ -75,7 +80,7 @@ export var HamProcessor = {
         url = renderUrl(link, params),
         method = link.method && link.method.toUpperCase() || "GET",
         chan = Channel();
-    this.subscribeURI(url, method, link.rel, data, chan)
+    this.subscribeURI(url, method, data, chan)
     return chan
   },
   registerSchema: function(identifier, schema) {
@@ -105,58 +110,70 @@ export var HamProcessor = {
     }
     return _.first(links)
   },
-  subscribeURI: function(url, method, rel, data, chan) {
+  subscribeURI: function(url, method, data, chan) {
     var self = this,
-        okay = this.sendCache(url, method, rel, chan),
+        okay = method == "GET" && this.sendCache(url, chan),
         subId = _.uniqueId();
     if (!okay) {
-      this.callURI(url, method, rel, data, chan.send)
+      this.callURI(url, method, data, chan.send)
     }
     //keep tabs on chan
-    assocIn(this.channels, [url, method, rel, subId], chan)
+    assocIn(this.channels, [url, subId], chan)
     chan.onClose = function() {
-      dissocIn(self.channels, [url, method, rel, subId])
+      dissocIn(self.channels, [url, subId])
     }
   },
   parseResponse: function(response) {
-    return response.body
+    console.log('parsing response:', response)
+    if (response.error) {
+      throw(error)
+    }
+
+    //TODO handle redirects properly
+    var uri = response.req.url,
+        action = response.req.method
+    /*
+    if (response.status >= 300 && response.status < 400 && response.headers.Location) {
+      uri = response.headers.Location
+    }*/
+
+    var document = response.body;
+    document = this.setMeta(document, {
+      timestamp: new Date().getTime(),
+      uri: response.req.url,
+      action: action
+    })
+
+    if (response.profile) {
+      //TODO if profile has not been seen, fetch it
+      var schema = this.getSchema(response.profile)
+      document.setMeta({
+        schema: schema,
+        schema_url: response.profile
+      })
+    }
+
+    return document
   },
-  callURI: function(url, method, rel, data, callback) {
+  callURI: function(url, method, data, callback) {
     var self = this;
     doRequest(url, method, self.headers, data, function(response) {
-      //TODO if response is 500 then simply push to callback
-      var profileURI = response.profile,
-          document = self.parseResponse(response);
-
-      document = self.setMeta(document, {
-        timestamp: new Date().getTime(),
-        uri: url
-      })
-
-      if (profileURI) {
-        //TODO if profileURI has not been seen, fetch it
-        var schema = self.getSchema(profileURI)
-        document.setMeta({
-          schema: schema,
-          schema_url: profileURI
-        })
-      }
-
-      //CONSIDER: document may be a redirect GET from a POST or PUT
-      self.publishURI(url, method, rel, document);
+      var document = self.parseResponse(response);
+      self.publishDocument(document);
       if (callback) callback(document);
     });
   },
-  publishURI: function(url, method, rel, document, success) {
+  publishDocument: function(document, success) {
     if (!success && !this.checkSuccess(document)) return
-    this.updateCache(url, method, rel, document)
+    var meta = this.getMeta(document)
+    this.updateCache(document)
     //publish to listening channels
-    _.each(getIn(this.channels, [url, method, rel], function(chan) {
+    _.each(this.channels[meta.uri], function(chan) {
       chan.send(document)
-      if (method == "DELETE") {
+      if (meta.action == "DELETE") {
         chan.close()
       }
-    }))
+    })
   },
   checkSuccess: function(document) {
     return true;
@@ -179,20 +196,22 @@ export function Ham(props) {
     channels: {},
     schema_sources: {},
     resolveInstancesUrlFromDetailUrl: function(url) {
-      var found_link = null,
+      var self = this,
+          found_link = null,
           params = null;
       _.each(this.schemas, function(schema, ident) {
         if (found_link) return false
-        _.each(schema.links, function(link) {
-          //url match href pattern and populate params
-          var matcher = renderUrlMatcher(link),
+        var full_link = self.getLink(schema, {rel: "full", method: "GET"}),
+            instances_link = self.getLink(schema, {rel: "instances", method: "GET"});
+        if (full_link && instances_link) {
+          var matcher = renderUrlMatcher(full_link),
               matches = matcher(url);
           if (matches) {
-            found_link = link
+            found_link = instances_link
             params = matches
-            return false
+            return false;
           }
-        })
+        }
       })
       if (found_link) {
         return renderUrl(found_link, params)
@@ -200,15 +219,16 @@ export function Ham(props) {
         return false;
       }
     },
-    updateCache: function(url, method, rel, document) {
-      if (method == "GET") {
-        assocIn(this.objects, [url, method, rel], document)
-      } else if (method == "DELETE") {
-        dissocIn(this.objects, [url, "GET"])
+    updateCache: function(document) {
+      var meta = this.getMeta(document),
+          url = meta.uri;
+      this.objects[url] = document
+      if (meta.action == "DELETE") {
+        dissocIn(this.objects, [url])
 
         //remove the object from our instances cache
         var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
-            instancesDocument = getIn(this.objects, [instancesUrl, "GET", "instances"]);
+            instancesDocument = this.objects[instancesUrl];
         if (instancesDocument) {
           var instances = this.rootObject(instancesDocument),
               detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
@@ -220,18 +240,20 @@ export function Ham(props) {
           if (_.size(path)) {
             assocIn(instancesDocument, path, instances)
           } else {
+            //TODO we need meta
             instancesDocument = instances
           }
-          this.publishURI(instancesUrl, "GET", "instances", instancesDocument, true)
+          this.publishDocument(instancesDocument, true)
         }
-      } else if (rel == "create") {
+      } else if (meta.action == "GET") {
         //add the object to our instances cache
-        var root = this.rootObject(document),
-            instancesDocument = getIn(this.objects, [url, "GET", "instances"]);
+        var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
+            instancesDocument = this.objects[instancesUrl];
         if (instancesDocument) {
-          var instances = this.rootObject(instancesDocument)
+          var instances = this.rootObject(instancesDocument),
+              root = this.rootObject(document);
           instances.push(root)
-          this.publishURI(url, "GET", "instances", instancesDocument, true)
+          this.publishDocument(instancesDocument, true)
         }
       }
     },
