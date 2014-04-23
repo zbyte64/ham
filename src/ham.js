@@ -118,6 +118,7 @@ export var HamProcessor = {
       this.callURI(url, method, data, chan.send)
     }
     //keep tabs on chan
+    //TODO subscribe to the redirected url
     assocIn(this.channels, [url, subId], chan)
     chan.onClose = function() {
       dissocIn(self.channels, [url, subId])
@@ -262,12 +263,12 @@ export function Ham(props) {
         }
       }
     },
-    sendCache: function(url, method, rel, chan) {
-      var cache = getIn(this.objects, [url, method, rel]);
+    sendCache: function(url, chan) {
+      var cache = this.objects.url;
       if (cache) {
         chan.send(cache)
         var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
-        if (method == "GET" && time_since < this.cacheTime) {
+        if (time_since < this.cacheTime) {
           return true;
         }
       }
