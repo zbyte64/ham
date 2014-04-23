@@ -78,7 +78,7 @@ describe("Ham", function () {
     })
   })
 
-  describe("getLink", function() {
+  describe("getLink()", function() {
     it("retrieve link from in instances document", function() {
       var actualResult = client.getLink(client.objects['/my-app'], {rel: "full", method: "GET"})
       expect(actualResult).toEqual({rel: "full", method:"GET", href:"/{app}/{id}"});
@@ -87,7 +87,7 @@ describe("Ham", function () {
 
   describe("updateCache()", function () {
     it("created object is added to instances", function () {
-      var document = common.MetaObject({id: 12345, name: "test sprocket"});
+      var document = common.MetaObject({app:'my-app', id: 12345, name: "test sprocket"});
       document.setMeta({
         action: "GET",
         uri: "/my-app/12345",
@@ -102,7 +102,7 @@ describe("Ham", function () {
     });
 
     it("deleted object is removed from instances", function () {
-      var document = common.MetaObject({id: 12345, name: "test sprocket"});
+      var document = common.MetaObject({app:'my-app', id: 12345, name: "test sprocket"});
       document.setMeta({
         action: "GET",
         uri: "/my-app/12345",
@@ -119,7 +119,7 @@ describe("Ham", function () {
       //
       client.updateCache(delete_document)
 
-      var actualResult = client.objects["/my-app"],
+      var actualResult = _.toArray(client.objects["/my-app"]),
           expectedResult = [];
 
       expect(actualResult).toEqual(expectedResult);

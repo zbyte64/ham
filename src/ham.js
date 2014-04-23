@@ -222,7 +222,6 @@ export function Ham(props) {
     updateCache: function(document) {
       var meta = this.getMeta(document),
           url = meta.uri;
-      this.objects[url] = document
       if (meta.action == "DELETE") {
         dissocIn(this.objects, [url])
 
@@ -237,15 +236,21 @@ export function Ham(props) {
           instances = _.filter(instances, function(instance) {
             return renderUrl(detailLink, instance) != url
           })
+
           if (_.size(path)) {
             assocIn(instancesDocument, path, instances)
           } else {
             //TODO we need meta
-            instancesDocument = instances
+            instancesDocument = this.setMeta(instances, {
+              uri: instancesUrl,
+              action: "GET"
+            })
           }
           this.publishDocument(instancesDocument, true)
         }
       } else if (meta.action == "GET") {
+        this.objects[url] = document
+
         //add the object to our instances cache
         var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
             instancesDocument = this.objects[instancesUrl];
