@@ -145,30 +145,27 @@ export function getIn(struct, path) {
   }
 }
 
-function innerRequest(url, method, headers, data, callback) {
-  var req = request(method, url).withCredentials().type('json').accept('json').set(headers).redirects(0)
+export function doRequest(url, method, headers, data, callback) {
+  method = method && method.toLowerCase() || "get"
+  headers = headers || {}
+  headers.accept = headers.accept || 'application/json'
+  headers['Content-Type'] = headers['Content-Type'] || 'application/json'
+  var redirects = []
+  var req = request(method, url).on('redirect', function(res) {
+    redirects.push(res.headers.location)
+  }).withCredentials().set(headers)
+
   if (data) {
-    if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
+    if (method == "get" || method == "head" || method == "options") {
       req.query(data)
     } else {
+      //TODO allow FormData
       req.send(JSON.stringify(data))
     }
   }
-  req.end(callback);
+  req.end(function(res) {
+    res.redirects = redirects
+    callback(res)
+  });
   return req
-};
-
-export function doRequest(url, method, headers, data, callback) {
-  function handler(response) {
-    if (response.status >= 300 && response.status < 400 && response.headers.Location) {
-      if (response.status != 307) {
-        method = "GET"
-      }
-      //TODO allow for more then 1 redirect
-      innerRequest(response.headers.Location, method, headers, null, callback)
-    } else {
-      callback(response)
-    }
-  }
-  return innerRequest(url, method, headers, data, handler)
 };

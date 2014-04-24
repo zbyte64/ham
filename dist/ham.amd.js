@@ -150,32 +150,29 @@ define("/common",
       }
     }
 
-    __exports__.getIn = getIn;function innerRequest(url, method, headers, data, callback) {
-      var req = request(method, url).withCredentials().type('json').accept('json').set(headers).redirects(0)
+    __exports__.getIn = getIn;function doRequest(url, method, headers, data, callback) {
+      method = method && method.toLowerCase() || "get"
+      headers = headers || {}
+      headers.accept = headers.accept || 'application/json'
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json'
+      var redirects = []
+      var req = request(method, url).on('redirect', function(res) {
+        redirects.push(res.headers.location)
+      }).withCredentials().set(headers)
+
       if (data) {
-        if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
+        if (method == "get" || method == "head" || method == "options") {
           req.query(data)
         } else {
+          //TODO allow FormData
           req.send(JSON.stringify(data))
         }
       }
-      req.end(callback);
+      req.end(function(res) {
+        res.redirects = redirects
+        callback(res)
+      });
       return req
-    };
-
-    function doRequest(url, method, headers, data, callback) {
-      function handler(response) {
-        if (response.status >= 300 && response.status < 400 && response.headers.Location) {
-          if (response.status != 307) {
-            method = "GET"
-          }
-          //TODO allow for more then 1 redirect
-          innerRequest(response.headers.Location, method, headers, null, callback)
-        } else {
-          callback(response)
-        }
-      }
-      return innerRequest(url, method, headers, data, handler)
     };
     __exports__.doRequest = doRequest;
   });;define("/ham", 
@@ -304,36 +301,54 @@ define("/common",
       },
       subscribeURI: function(url, method, data, chan) {
         var self = this,
-            okay = method == "GET" && this.sendCache(url, chan),
+            useCache = false,
             subId = _.uniqueId();
-        if (!okay) {
-          this.callURI(url, method, data, chan.send)
+
+        function subscribe() {
+          //can i get a lock? or a real pub sub...
+          assocIn(self.channels, [url, subId], chan)
+          chan.onClose = function() {
+            dissocIn(self.channels, [url, subId])
+          }
         }
-        //keep tabs on chan
-        //TODO subscribe to the redirected url
-        assocIn(this.channels, [url, subId], chan)
-        chan.onClose = function() {
-          dissocIn(self.channels, [url, subId])
+
+        function subscribeAndSend(response) {
+          chan.send(response)
+          //subscribe to the result
+          url = self.getMeta(response).uri || url
+          subscribe()
         }
+
+        if (method == "GET") {
+          useCache = this.sendCache(url, chan)
+        }
+        if (useCache) {
+          subscribe()
+        } else {
+          this.callURI(url, method, data, subscribeAndSend)
+        }
+
       },
       parseResponse: function(response) {
         console.log('parsing response:', response)
         if (response.error) {
-          throw(error)
+          throw(response.error)
         }
 
-        //TODO handle redirects properly
         var uri = response.req.url,
             action = response.req.method
-        /*
-        if (response.status >= 300 && response.status < 400 && response.headers.Location) {
-          uri = response.headers.Location
-        }*/
+
+        if (response.headers.length) {
+          uri = response.headers[response.headers.length-1]
+          if (action != "DELETE") {
+            action = "GET"
+          }
+        }
 
         var document = response.body;
         document = this.setMeta(document, {
           timestamp: new Date().getTime(),
-          uri: response.req.url,
+          uri: uri,
           action: action
         })
 
