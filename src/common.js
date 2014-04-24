@@ -14,7 +14,7 @@ export var MetaArray = function() {
 MetaArray.prototype = new Array;
 
 MetaArray.prototype.setMeta = function(meta) {
-  this.__meta = _.extend({} || this.__meta, meta)
+  this.__meta = _.extend(this.__meta || {}, meta)
 };
 
 MetaArray.prototype.getMeta = function() {
@@ -30,7 +30,7 @@ export var MetaObject = function() {
 MetaObject.prototype = new Object;
 
 MetaObject.prototype.setMeta = function(meta) {
-  this.__meta = _.extend({} || this.__meta, meta)
+  this.__meta = _.extend(this.__meta || {}, meta)
 };
 
 MetaObject.prototype.getMeta = function() {
@@ -50,14 +50,17 @@ export function Channel() {
     },
     bind: function(f) {
       self.queue = async.queue(function(task, callback) {
-        f(task)
+        if (f(task) === false) {
+          self.close()
+        }
         callback()
-      })
+      }, 1)
       self.queue.push(self._backlog)
       self._backlog = null
     },
     close: function() {
       if(!self.closed) {
+        self.queue.kill()
         self.queue = null;
         self._backlog = null;
         self.closed = true;
@@ -146,7 +149,7 @@ export function getIn(struct, path) {
 }
 
 export function doRequest(url, method, headers, data, callback) {
-  method = method && method.toLowerCase() || "get"
+  method = method && method.toUpperCase() || "GET"
   headers = headers || {}
   headers.accept = headers.accept || 'application/json'
   headers['Content-Type'] = headers['Content-Type'] || 'application/json'
@@ -156,7 +159,7 @@ export function doRequest(url, method, headers, data, callback) {
   }).withCredentials().set(headers)
 
   if (data) {
-    if (method == "get" || method == "head" || method == "options") {
+    if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
       req.query(data)
     } else {
       //TODO allow FormData

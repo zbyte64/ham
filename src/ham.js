@@ -41,8 +41,9 @@ export var HamProcessor = {
         docMeta = this.getMeta(document),
         subObject = getIn(document, parts);
     subObject = this.setMeta(subObject, {
-        timestamp: docMeta.timestamp,
-        uri: docMeta.uri + ptr
+      timestamp: docMeta.timestamp,
+      action: docMeta.action,
+      uri: docMeta.uri + ptr
     })
 
       /*
@@ -58,7 +59,7 @@ export var HamProcessor = {
     var link = this.rootLink(document);
     if (link) {
       var rootObject = this.subObject(document, link.href);
-      rootObject.__meta.rel = "root";
+      this.setMeta(rootObject, {rel: "root"});
       return rootObject;
     } else {
       return document
@@ -95,7 +96,7 @@ export var HamProcessor = {
       var schema = this.getSchema(identifierOrDocument);
       //TODO get link defs for schema through schema definition
       if (!schema) {
-        console.log("failed to find schema:", identifierOrDocument, this.schemas)
+        console.log("failed to find schema:", identifierOrDocument, filters)
       } else {
         links = schema.links
       }
@@ -146,7 +147,9 @@ export var HamProcessor = {
       throw(response.error)
     }
 
-    var uri = response.req.url,
+    //TODO there is no guarantee we will have a these headers.
+    //Seperate out a less assuming parser
+    var uri = response.headers.uri || response.headers.location || response.req.url,
         action = response.req.method
 
     if (response.headers.length) {
@@ -241,6 +244,7 @@ export function Ham(props) {
     updateCache: function(document) {
       var meta = this.getMeta(document),
           url = meta.uri;
+      //console.log("update cache on:", meta)
       if (meta.action == "DELETE") {
         dissocIn(this.objects, [url])
 
@@ -267,7 +271,10 @@ export function Ham(props) {
           }
           this.publishDocument(instancesDocument, true)
         }
-      } else if (meta.action == "GET") {
+      //the result of a get or modification
+      } else if (meta.action == "GET" || meta.action == "PATCH" ||
+                 meta.action == "POST" || meta.action == "PUT") {
+        //console.log("setting cache", url, document)
         this.objects[url] = document
 
         //add the object to our instances cache
@@ -282,7 +289,7 @@ export function Ham(props) {
       }
     },
     sendCache: function(url, chan) {
-      var cache = this.objects.url;
+      var cache = this.objects[url];
       if (cache) {
         chan.send(cache)
         var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
@@ -297,7 +304,9 @@ export function Ham(props) {
           self = this;
       doRequest(url, "GET", this.headers, null, function(response) {
         var schemas = self.parseResponse(response)
-        self.schema_sources[url] = schemas;
+        self.schema_sources[url] = _.filter(schemas, function(val, key) {
+          return typeof val == "object"
+        });
         _.each(schemas, function(schema, key) {
           self.registerSchema(key, schema)
           self.registerSchema(url + "#/" + key, schema)
