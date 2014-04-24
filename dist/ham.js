@@ -93,7 +93,7 @@ exports.renderUrl = renderUrl;function renderUrlRegexp(link) {
     matchS = matchS.replace(val, "([^\\/]*)")
     args.push(val.substr(1, val.length-2))
   })
-  return [new RegExp(matchS), args]
+  return [new RegExp("^"+matchS+"$"), args]
 }
 
 exports.renderUrlRegexp = renderUrlRegexp;function renderUrlMatcher(link) {
@@ -191,9 +191,11 @@ var HamProcessor = {
   rootLink: function(document) {
     return this.getLink(document, {rel: 'root'});
   },
-  splitURIptr: function(ptr) {
+  splitURIptr: function(uri) {
+    if (!uri) return []
+    var ptr = uri.split('#', 2)[1]
     if (!ptr) return []
-    return _.filter(_.last(ptr.split('#', 2)).split('/'))
+    return _.filter(ptr.split('/'))
   },
   setMeta: function(document, meta) {
     if (document instanceof MetaArray ||
@@ -289,7 +291,18 @@ var HamProcessor = {
       var schema = this.getMeta(identifierOrDocument).schema || {};
       links = _.merge([], schema.links, identifierOrDocument.links)
     }
-    links = _.where(links, filters)
+
+    //case insensitive matching
+    links = _.transform(links, function(result, link) {
+      if (_.every(filters, function(value, key) {
+        if (typeof value == "string") {
+          return link[key].toLowerCase() == value.toLowerCase()
+        }
+        return link[key] == value
+      })) {
+         result.push(link)
+      }
+    });
     if (_.size(links) > 1) {
       //TODO error, more then one link found
     }
@@ -447,27 +460,40 @@ function Ham(props) {
           if (_.size(path)) {
             assocIn(instancesDocument, path, instances)
           } else {
-            //TODO we need meta
-            instancesDocument = this.setMeta(instances, {
-              uri: instancesUrl,
-              action: "GET"
-            })
+            instancesDocument = this.setMeta(instances, this.getMeta(instancesDocument))
           }
           this.publishDocument(instancesDocument, true)
         }
       //the result of a get or modification
       } else if (meta.action == "GET" || meta.action == "PATCH" ||
                  meta.action == "POST" || meta.action == "PUT") {
-        //console.log("setting cache", url, document)
+        console.log("setting cache", url, document)
         this.objects[url] = document
 
         //add the object to our instances cache
         var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
             instancesDocument = this.objects[instancesUrl];
+        console.log("check instances:", instancesUrl, instancesDocument)
         if (instancesDocument) {
           var instances = this.rootObject(instancesDocument),
-              root = this.rootObject(document);
-          instances.push(root)
+              detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
+              path = this.splitURIptr(this.getMeta(instances).uri),
+              root = this.rootObject(document),
+              newObject = true;
+          instances = _.transform(instances, function(result, instance) {
+            if (renderUrl(detailLink, instance) == url) {
+              result.push(root)
+              newObject = false;
+            } else {
+              result.push(instance)
+            }
+          })
+          if (newObject) instances.push(root)
+          if (_.size(path)) {
+            assocIn(instancesDocument, path, instances)
+          } else {
+            instancesDocument = this.setMeta(instances, this.getMeta(instancesDocument))
+          }
           this.publishDocument(instancesDocument, true)
         }
       }
@@ -488,9 +514,14 @@ function Ham(props) {
           self = this;
       doRequest(url, "GET", this.headers, null, function(response) {
         var schemas = self.parseResponse(response)
-        self.schema_sources[url] = _.filter(schemas, function(val, key) {
-          return typeof val == "object"
+        self.schema_sources[url] = schemas;
+
+        schemas = _.transform(schemas, function(result, val, key) {
+          if(typeof val == "object") {
+            result[key] = val
+          }
         });
+
         _.each(schemas, function(schema, key) {
           self.registerSchema(key, schema)
           self.registerSchema(url + "#/" + key, schema)

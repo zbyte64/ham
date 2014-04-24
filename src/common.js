@@ -92,7 +92,7 @@ export function renderUrlRegexp(link) {
     matchS = matchS.replace(val, "([^\\/]*)")
     args.push(val.substr(1, val.length-2))
   })
-  return [new RegExp(matchS), args]
+  return [new RegExp("^"+matchS+"$"), args]
 }
 
 export function renderUrlMatcher(link) {

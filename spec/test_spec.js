@@ -60,10 +60,17 @@ describe("Ham", function () {
       ]
     };
     var instances = new common.MetaArray()
-    instances.setMeta({schema: sprockets})
+    instances.setMeta({schema: sprockets, action: "GET", uri:"/my-app"})
     client = ham.Ham({
       schemas: {
-        sprockets: sprockets
+        sprockets: sprockets,
+        interference: {
+          links: [
+            {rel: "create", method:"POST", href:"/"},
+            {rel: "full", method:"GET", href:"/{app}"},
+            {rel: "instances", method:"GET", href:"/"}
+          ]
+        }
       },
       objects: {
         "/my-app": instances
