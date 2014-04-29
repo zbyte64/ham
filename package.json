@@ -26,5 +26,5 @@
     "dist/ham.amd.js",
     "dist/ham.js"
   ],
-  "main": "ham.js"
+  "main": "dist/ham.js"
 }
