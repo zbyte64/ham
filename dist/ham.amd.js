@@ -161,7 +161,11 @@ define("/common",
       var redirects = []
       var req = request(method, url).on('redirect', function(res) {
         redirects.push(res.headers.location)
-      }).withCredentials().set(headers)
+      }).set(headers)
+
+      if (req.withCredentials) {
+        req = req.withCredentials()
+      }
 
       if (data) {
         if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
@@ -195,6 +199,7 @@ define("/common",
 
 
     var HamProcessor = {
+      baseURI: '',
       regexProfileURI: /.*;.*profile\=([A-Za-z0-9\-_\/\#]+).*/,
       rootLink: function(document) {
         return this.getLink(document, {rel: 'root'});
@@ -275,6 +280,9 @@ define("/common",
             url = renderUrl(link, params),
             method = link.method && link.method.toUpperCase() || "GET",
             chan = Channel();
+        if (this.baseURI && url[0] == '/') {
+          url = this.baseURI + url;
+        }
         this.subscribeURI(url, method, data, chan)
         return chan
       },

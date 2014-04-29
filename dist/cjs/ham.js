@@ -12,6 +12,7 @@ var doRequest = require("./common").doRequest;
 
 
 var HamProcessor = {
+  baseURI: '',
   regexProfileURI: /.*;.*profile\=([A-Za-z0-9\-_\/\#]+).*/,
   rootLink: function(document) {
     return this.getLink(document, {rel: 'root'});
@@ -92,6 +93,9 @@ var HamProcessor = {
         url = renderUrl(link, params),
         method = link.method && link.method.toUpperCase() || "GET",
         chan = Channel();
+    if (this.baseURI && url[0] == '/') {
+      url = this.baseURI + url;
+    }
     this.subscribeURI(url, method, data, chan)
     return chan
   },

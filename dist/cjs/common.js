@@ -157,7 +157,11 @@ exports.getIn = getIn;function doRequest(url, method, headers, data, callback) {
   var redirects = []
   var req = request(method, url).on('redirect', function(res) {
     redirects.push(res.headers.location)
-  }).withCredentials().set(headers)
+  }).set(headers)
+
+  if (req.withCredentials) {
+    req = req.withCredentials()
+  }
 
   if (data) {
     if (method == "GET" || method == "HEAD" || method == "OPTIONS") {
