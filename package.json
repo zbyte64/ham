@@ -24,7 +24,8 @@
   "files": [
     "dist/ham.min.js",
     "dist/ham.amd.js",
-    "dist/ham.js"
+    "dist/cjs/ham.js",
+    "dist/cjs/common.js"
   ],
-  "main": "dist/ham.js"
+  "main": "dist/cjs/ham.js"
 }

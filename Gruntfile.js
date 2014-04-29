@@ -32,13 +32,6 @@ module.exports = function(grunt) {
       options: {
         separator: ';',
       },
-      cjs: {
-
-        src: [
-          'dist/cjs/**/*.js'
-        ],
-        dest: 'dist/ham.js'
-      },
       amd: {
         options: {
           banner: '/*! <%= pkg.name %> <%= grunt.template.today("yyyy-mm-dd") %> */\n',
