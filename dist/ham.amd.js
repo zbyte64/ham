@@ -1,4 +1,4 @@
-/*! ham 2014-04-29 */
+/*! ham 2014-05-01 */
 define("/common", 
   ["lodash","superagent","async","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
@@ -355,7 +355,6 @@ define("/common",
 
       },
       parseResponse: function(response) {
-        console.log('parsing response:', response)
         if (response.error) {
           throw(response.error)
         }
@@ -483,13 +482,11 @@ define("/common",
           //the result of a get or modification
           } else if (meta.action == "GET" || meta.action == "PATCH" ||
                      meta.action == "POST" || meta.action == "PUT") {
-            console.log("setting cache", url, document)
             this.objects[url] = document
 
             //add the object to our instances cache
             var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
                 instancesDocument = this.objects[instancesUrl];
-            console.log("check instances:", instancesUrl, instancesDocument)
             if (instancesDocument) {
               var instances = this.rootObject(instancesDocument),
                   detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),

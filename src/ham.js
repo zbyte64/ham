@@ -159,7 +159,6 @@ export var HamProcessor = {
 
   },
   parseResponse: function(response) {
-    console.log('parsing response:', response)
     if (response.error) {
       throw(response.error)
     }
@@ -287,13 +286,11 @@ export function Ham(props) {
       //the result of a get or modification
       } else if (meta.action == "GET" || meta.action == "PATCH" ||
                  meta.action == "POST" || meta.action == "PUT") {
-        console.log("setting cache", url, document)
         this.objects[url] = document
 
         //add the object to our instances cache
         var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
             instancesDocument = this.objects[instancesUrl];
-        console.log("check instances:", instancesUrl, instancesDocument)
         if (instancesDocument) {
           var instances = this.rootObject(instancesDocument),
               detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
