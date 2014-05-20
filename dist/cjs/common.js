@@ -1,7 +1,6 @@
 "use strict";
 var _ = require("lodash")["default"] || require("lodash");
 var request = require("superagent")["default"] || require("superagent");
-var async = require("async")["default"] || require("async");
 
 //Holds things I should find libraries for
 
@@ -38,42 +37,7 @@ MetaObject.prototype.getMeta = function() {
   return this.__meta || {}
 };
 
-function Channel() {
-  var self = _.extend({}, {
-    _backlog: [],
-    queue: null,
-    send: function(data) {
-      if (!self.queue) {
-        self._backlog.push(data)
-      } else {
-        self.queue.push(data)
-      }
-    },
-    bind: function(f) {
-      self.queue = async.queue(function(task, callback) {
-        if (f(task) === false) {
-          self.close()
-        }
-        callback()
-      }, 1)
-      self.queue.push(self._backlog)
-      self._backlog = null
-    },
-    close: function() {
-      if(!self.closed) {
-        self.queue.kill()
-        self.queue = null;
-        self._backlog = null;
-        self.closed = true;
-        self.onClose()
-      }
-    },
-    onClose: function() {}
-  })
-  return self;
-}
-
-exports.Channel = Channel;var urlTemplatePattern = /\{([^\{\}]*)\}/g;
+var urlTemplatePattern = /\{([^\{\}]*)\}/g;
 exports.urlTemplatePattern = urlTemplatePattern;
 function renderUrl(link, params) {
   var url = link.href;

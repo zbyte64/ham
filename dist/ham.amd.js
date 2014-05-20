@@ -1,11 +1,10 @@
-/*! ham 2014-05-01 */
+/*! ham 2014-05-20 */
 define("/common", 
-  ["lodash","superagent","async","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
+  ["lodash","superagent","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var _ = __dependency1__["default"] || __dependency1__;
     var request = __dependency2__["default"] || __dependency2__;
-    var async = __dependency3__["default"] || __dependency3__;
 
     //Holds things I should find libraries for
 
@@ -42,42 +41,7 @@ define("/common",
       return this.__meta || {}
     };
 
-    function Channel() {
-      var self = _.extend({}, {
-        _backlog: [],
-        queue: null,
-        send: function(data) {
-          if (!self.queue) {
-            self._backlog.push(data)
-          } else {
-            self.queue.push(data)
-          }
-        },
-        bind: function(f) {
-          self.queue = async.queue(function(task, callback) {
-            if (f(task) === false) {
-              self.close()
-            }
-            callback()
-          }, 1)
-          self.queue.push(self._backlog)
-          self._backlog = null
-        },
-        close: function() {
-          if(!self.closed) {
-            self.queue.kill()
-            self.queue = null;
-            self._backlog = null;
-            self.closed = true;
-            self.onClose()
-          }
-        },
-        onClose: function() {}
-      })
-      return self;
-    }
-
-    __exports__.Channel = Channel;var urlTemplatePattern = /\{([^\{\}]*)\}/g;
+    var urlTemplatePattern = /\{([^\{\}]*)\}/g;
     __exports__.urlTemplatePattern = urlTemplatePattern;
     function renderUrl(link, params) {
       var url = link.href;
@@ -187,7 +151,6 @@ define("/common",
   function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var _ = __dependency1__["default"] || __dependency1__;
-    var Channel = __dependency2__.Channel;
     var renderUrl = __dependency2__.renderUrl;
     var MetaArray = __dependency2__.MetaArray;
     var MetaObject = __dependency2__.MetaObject;
@@ -265,26 +228,30 @@ define("/common",
         }
       },
       getDocument: function(identifier, filters, params, data, callback) {
-        return this.streamDocument(identifier, filters, params, data, function(document) {
-          if (callback) callback(document);
-          return false;
-        });
+        return this.openChannel(identifier, filters, params, data, callback);
       },
       streamDocument: function(identifier, filters, params, data, callback) {
-        var chan = this.openChannel(identifier, filters, params, data)
-        chan.bind(callback)
-        return chan
+        //TODO this will mean open a websocket
+        return this.openChannel(identifier, filters, params, data, callback)
       },
-      openChannel: function(identifier, filters, params, data) {
+      openChannel: function(identifier, filters, params, data, callback) {
+        //lookup the endpoint and return a subscription to the result
         var link = this.getLink(identifier, filters),
             url = renderUrl(link, params),
-            method = link.method && link.method.toUpperCase() || "GET",
-            chan = Channel();
+            method = link.method && link.method.toUpperCase() || "GET";
         if (this.baseURI && url[0] == '/') {
           url = this.baseURI + url;
         }
-        this.subscribeURI(url, method, data, chan)
-        return chan
+
+        var useCache = false,
+            f = this.getURISubscription(url, callback);
+        if (method == "GET") {
+          useCache = this.sendCache(url, f)
+        }
+        if (!useCache) {
+          this.callURI(url, method, data, f)
+        }
+        return f
       },
       registerSchema: function(identifier, schema) {
         this.schemas[identifier] = schema;
@@ -324,35 +291,14 @@ define("/common",
         }
         return _.first(links)
       },
-      subscribeURI: function(url, method, data, chan) {
-        var self = this,
-            useCache = false,
-            subId = _.uniqueId();
-
-        function subscribe() {
-          //can i get a lock? or a real pub sub...
-          assocIn(self.channels, [url, subId], chan)
-          chan.onClose = function() {
-            dissocIn(self.channels, [url, subId])
-          }
+      getURI: function(identifierOrDocument, filters, params) {
+        return renderUrl(this.getLink(identifierOrDocument, filters), params)
+      },
+      getURISubscription: function(url, callback) {
+        //Clients can put bacon.js or postal.js here
+        return function(val) {
+          if (callback) callback(val)
         }
-
-        function subscribeAndSend(response) {
-          chan.send(response)
-          //subscribe to the result
-          url = self.getMeta(response).uri || url
-          subscribe()
-        }
-
-        if (method == "GET") {
-          useCache = this.sendCache(url, chan)
-        }
-        if (useCache) {
-          subscribe()
-        } else {
-          this.callURI(url, method, data, subscribeAndSend)
-        }
-
       },
       parseResponse: function(response) {
         if (response.error) {
@@ -401,150 +347,148 @@ define("/common",
         if (!success && !this.checkSuccess(document)) return
         var meta = this.getMeta(document)
         this.updateCache(document)
-        //publish to listening channels
-        _.each(this.channels[meta.uri], function(chan) {
-          chan.send(document)
-          if (meta.action == "DELETE") {
-            chan.close()
-          }
-        })
+        this.notifySubscribers(document)
       },
       checkSuccess: function(document) {
         return true;
       },
+      notifySubscribers: function(document) {
+        //Clients should notify subscribers here
+      },
       updateCache: function() {
         //no-op
       },
-      sendCache: function() {
+      sendCache: function(url, callback) {
         //no-op
+        return false;
       },
       headers: {}
-    }
-
-    function Ham(props) {
-      return _.extend({}, HamProcessor, {
-        cacheTime: 5 * 60 * 1000, //in milliseconds, 5 minute default
-        schemas: {},
-        objects: {},
-        recycle_bin: {},
-        channels: {},
-        schema_sources: {},
-        resolveInstancesUrlFromDetailUrl: function(url) {
-          var self = this,
-              found_link = null,
-              params = null;
-          _.each(this.schemas, function(schema, ident) {
-            if (found_link) return false
-            var full_link = self.getLink(schema, {rel: "full", method: "GET"}),
-                instances_link = self.getLink(schema, {rel: "instances", method: "GET"});
-            if (full_link && instances_link) {
-              var matcher = renderUrlMatcher(full_link),
-                  matches = matcher(url);
-              if (matches) {
-                found_link = instances_link
-                params = matches
-                return false;
-              }
-            }
-          })
-          if (found_link) {
-            return renderUrl(found_link, params)
-          } else {
-            return false;
-          }
-        },
-        updateCache: function(document) {
-          var meta = this.getMeta(document),
-              url = meta.uri;
-          //console.log("update cache on:", meta)
-          if (meta.action == "DELETE") {
-            dissocIn(this.objects, [url])
-
-            //remove the object from our instances cache
-            var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
-                instancesDocument = this.objects[instancesUrl];
-            if (instancesDocument) {
-              var instances = this.rootObject(instancesDocument),
-                  detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
-                  path = this.splitURIptr(this.getMeta(instances).uri);
-              //if (!detailLink) return;
-              instances = _.filter(instances, function(instance) {
-                return renderUrl(detailLink, instance) != url
-              })
-
-              if (_.size(path)) {
-                assocIn(instancesDocument, path, instances)
-              } else {
-                instancesDocument = this.setMeta(instances, this.getMeta(instancesDocument))
-              }
-              this.publishDocument(instancesDocument, true)
-            }
-          //the result of a get or modification
-          } else if (meta.action == "GET" || meta.action == "PATCH" ||
-                     meta.action == "POST" || meta.action == "PUT") {
-            this.objects[url] = document
-
-            //add the object to our instances cache
-            var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
-                instancesDocument = this.objects[instancesUrl];
-            if (instancesDocument) {
-              var instances = this.rootObject(instancesDocument),
-                  detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
-                  path = this.splitURIptr(this.getMeta(instances).uri),
-                  root = this.rootObject(document),
-                  newObject = true;
-              instances = _.transform(instances, function(result, instance) {
-                if (renderUrl(detailLink, instance) == url) {
-                  result.push(root)
-                  newObject = false;
-                } else {
-                  result.push(instance)
-                }
-              })
-              if (newObject) instances.push(root)
-              if (_.size(path)) {
-                assocIn(instancesDocument, path, instances)
-              } else {
-                instancesDocument = this.setMeta(instances, this.getMeta(instancesDocument))
-              }
-              this.publishDocument(instancesDocument, true)
+    };
+    __exports__.HamProcessor = HamProcessor;
+    var HamCacher = {
+      cacheTime: 5 * 60 * 1000, //in milliseconds, 5 minute default
+      schemas: {},
+      objects: {},
+      recycle_bin: {},
+      schema_sources: {},
+      resolveInstancesUrlFromDetailUrl: function(url) {
+        var self = this,
+            found_link = null,
+            params = null;
+        _.each(this.schemas, function(schema, ident) {
+          if (found_link) return false
+          var full_link = self.getLink(schema, {rel: "full", method: "GET"}),
+              instances_link = self.getLink(schema, {rel: "instances", method: "GET"});
+          if (full_link && instances_link) {
+            var matcher = renderUrlMatcher(full_link),
+                matches = matcher(url);
+            if (matches) {
+              found_link = instances_link
+              params = matches
+              return false;
             }
           }
-        },
-        sendCache: function(url, chan) {
-          var cache = this.objects[url];
-          if (cache) {
-            chan.send(cache)
-            var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
-            if (time_since < this.cacheTime) {
-              return true;
-            }
-          }
-          return false
-        },
-        populateSchemasFromUri: function(url) {
-          var chan = Channel(),
-              self = this;
-          doRequest(url, "GET", this.headers, null, function(response) {
-            var schemas = self.parseResponse(response)
-            self.schema_sources[url] = schemas;
-
-            schemas = _.transform(schemas, function(result, val, key) {
-              if(typeof val == "object") {
-                result[key] = val
-              }
-            });
-
-            _.each(schemas, function(schema, key) {
-              self.registerSchema(key, schema)
-              self.registerSchema(url + "#/" + key, schema)
-            });
-            chan.send(schemas)
-          });
-          return chan
+        })
+        if (found_link) {
+          return renderUrl(found_link, params)
+        } else {
+          return false;
         }
-      }, props);
-    }
+      },
+      updateCache: function(document) {
+        var meta = this.getMeta(document),
+            url = meta.uri;
+        //console.log("update cache on:", meta)
+        if (meta.action == "DELETE") {
+          dissocIn(this.objects, [url])
 
+          //remove the object from our instances cache
+          var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
+              instancesDocument = this.objects[instancesUrl];
+          if (instancesDocument) {
+            var instances = this.rootObject(instancesDocument),
+                detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
+                path = this.splitURIptr(this.getMeta(instances).uri);
+            //if (!detailLink) return;
+            instances = _.filter(instances, function(instance) {
+              return renderUrl(detailLink, instance) != url
+            })
+
+            if (_.size(path)) {
+              assocIn(instancesDocument, path, instances)
+            } else {
+              instancesDocument = this.setMeta(instances, this.getMeta(instancesDocument))
+            }
+            this.publishDocument(instancesDocument, true)
+          }
+          //the result of a get or modification
+        } else if (meta.action == "GET" || meta.action == "PATCH" ||
+                   meta.action == "POST" || meta.action == "PUT") {
+          this.objects[url] = document
+
+          //add the object to our instances cache
+          var instancesUrl = this.resolveInstancesUrlFromDetailUrl(url),
+              instancesDocument = this.objects[instancesUrl];
+          if (instancesDocument) {
+            var instances = this.rootObject(instancesDocument),
+                detailLink = this.getLink(instancesDocument, {rel: "full", method: "GET"}),
+                path = this.splitURIptr(this.getMeta(instances).uri),
+                root = this.rootObject(document),
+                newObject = true;
+            instances = _.transform(instances, function(result, instance) {
+              if (renderUrl(detailLink, instance) == url) {
+                result.push(root)
+                newObject = false;
+              } else {
+                result.push(instance)
+              }
+            })
+            if (newObject) instances.push(root)
+            if (_.size(path)) {
+              assocIn(instancesDocument, path, instances)
+            } else {
+              instancesDocument = this.setMeta(instances, this.getMeta(instancesDocument))
+            }
+            this.publishDocument(instancesDocument, true)
+          }
+        }
+      },
+      sendCache: function(url, callback) {
+        var cache = this.objects[url];
+        if (cache) {
+          callback(cache)
+          var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
+          if (time_since < this.cacheTime) {
+            return true;
+          }
+        }
+        return false
+      },
+      populateSchemasFromUri: function(url, callback) {
+        var chan = this.getURISubscription(url, callback),
+            self = this;
+        doRequest(url, "GET", this.headers, null, function(response) {
+          var schemas = self.parseResponse(response)
+          self.schema_sources[url] = schemas;
+
+          schemas = _.transform(schemas, function(result, val, key) {
+            if(typeof val == "object") {
+              result[key] = val
+            }
+          });
+
+          _.each(schemas, function(schema, key) {
+            self.registerSchema(key, schema)
+            self.registerSchema(url + "#/" + key, schema)
+          });
+          chan(schemas)
+        });
+        return chan
+      }
+    };
+    __exports__.HamCacher = HamCacher;
+    function Ham(props) {
+      return _.extend({}, HamProcessor, HamCacher, props)
+    };
     __exports__.Ham = Ham;
   });define("ham", ["/ham"], function(ham) {return ham});

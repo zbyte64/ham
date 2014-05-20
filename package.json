@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "lodash": "~2.4.1",
-    "async": "~0.7.0",
     "superagent": "~0.17.0"
   },
   "devDependencies": {
