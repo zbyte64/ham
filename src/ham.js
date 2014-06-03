@@ -3,7 +3,7 @@ import postal from 'postal';
 import _rr from 'postal.request-response';
 import {renderUrl, MetaArray, MetaObject, renderUrlMatcher, assocIn, dissocIn, getIn, doRequest} from './common';
 
-_rr(postal);
+if (_.isFunction(_rr)) _rr(postal);
 
 export var HamProcessor = {
   baseURI: '',
@@ -366,9 +366,9 @@ export var HamCacher = {
     }
     return false
   },
-  populateSchemasFromUri: function(url, callback) {
-    var chan = this.getURISubscription(url, callback),
-        self = this;
+  populateSchemasFromUri: function(url) {
+    var self = this,
+        deferred = postal.configuration.promise.createDeferred();
     doRequest(url, "GET", this.headers, null, function(response) {
       var schemas = self.parseResponse(response)
       self.schema_sources[url] = schemas;
@@ -383,9 +383,9 @@ export var HamCacher = {
         self.registerSchema(key, schema)
         self.registerSchema(url + "#/" + key, schema)
       });
-      chan(schemas)
+      deferred.resolve(schemas)
     });
-    return chan
+    return postal.configuration.promise.getPromise(deferred)
   }
 };
 
