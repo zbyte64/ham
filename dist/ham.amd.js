@@ -1,4 +1,4 @@
-/*! ham 2014-05-20 */
+/*! ham 2014-06-03 */
 define("/common", 
   ["lodash","superagent","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -117,7 +117,7 @@ define("/common",
       }
     }
 
-    __exports__.getIn = getIn;function doRequest(url, method, headers, data, callback) {
+    __exports__.getIn = getIn;function doRequest(url, method, headers, data, callback, onError) {
       method = method && method.toUpperCase() || "GET"
       headers = headers || {}
       headers.accept = headers.accept || 'application/json'
@@ -141,28 +141,37 @@ define("/common",
       }
       req.end(function(res) {
         res.redirects = redirects
-        callback(res)
+        if (res.ok) {
+           callback(res)
+        } else {
+          onError(res)
+        }
+
       });
       return req
     };
     __exports__.doRequest = doRequest;
   });;define("/ham", 
-  ["lodash","./common","exports"],
-  function(__dependency1__, __dependency2__, __exports__) {
+  ["lodash","postal","postal.request-response","./common","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
     "use strict";
     var _ = __dependency1__["default"] || __dependency1__;
-    var renderUrl = __dependency2__.renderUrl;
-    var MetaArray = __dependency2__.MetaArray;
-    var MetaObject = __dependency2__.MetaObject;
-    var renderUrlMatcher = __dependency2__.renderUrlMatcher;
-    var assocIn = __dependency2__.assocIn;
-    var dissocIn = __dependency2__.dissocIn;
-    var getIn = __dependency2__.getIn;
-    var doRequest = __dependency2__.doRequest;
+    var postal = __dependency2__["default"] || __dependency2__;
+    var _rr = __dependency3__["default"] || __dependency3__;
+    var renderUrl = __dependency4__.renderUrl;
+    var MetaArray = __dependency4__.MetaArray;
+    var MetaObject = __dependency4__.MetaObject;
+    var renderUrlMatcher = __dependency4__.renderUrlMatcher;
+    var assocIn = __dependency4__.assocIn;
+    var dissocIn = __dependency4__.dissocIn;
+    var getIn = __dependency4__.getIn;
+    var doRequest = __dependency4__.doRequest;
 
+    _rr(postal);
 
     var HamProcessor = {
       baseURI: '',
+      channel: 'ham',
       regexProfileURI: /.*;.*profile\=([A-Za-z0-9\-_\/\#]+).*/,
       rootLink: function(document) {
         return this.getLink(document, {rel: 'root'});
@@ -227,14 +236,42 @@ define("/common",
           return document
         }
       },
-      getDocument: function(identifier, filters, params, data, callback) {
-        return this.openChannel(identifier, filters, params, data, callback);
+      getDocument: function(identifier, filters, params, data) {
+        return this.openChannel(identifier, filters, params, data);
       },
-      streamDocument: function(identifier, filters, params, data, callback) {
+      streamDocument: function(identifier, filters, params, data) {
         //TODO this will mean open a websocket
-        return this.openChannel(identifier, filters, params, data, callback)
+        return this.openChannel(identifier, filters, params, data)
       },
-      openChannel: function(identifier, filters, params, data, callback) {
+      setupResponses: function() {
+        this.setupResponsesDone = true;
+        var self = this;
+        var subscription = postal.subscribe({
+          //sets up a listener that returns a promise that resolves to an event subscription
+          channel: this.channel,
+          topic: "open",
+          callback: function(data, envelope) {
+            var useCache = false;
+            var deferred = postal.configuration.promise.createDeferred();
+            if (data.method == "GET") {
+              useCache = self.sendCache(data.url, data.payload)
+            }
+
+            if (!useCache) {
+              this.callURI(data.url, data.method, data.payload).then(function(doc) {
+                deferred.resolve()
+              }, function(reason) {
+                deferred.reject(reason)
+              })
+            } else {
+              deferred.resolve()
+            }
+            envelope.reply(postal.configuration.promise.getPromise(deferred))
+          }
+        })
+      },
+      openChannel: function(identifier, filters, params, data) {
+        if (!this.setupResponsesDone) this.setupResponses()
         //lookup the endpoint and return a subscription to the result
         var link = this.getLink(identifier, filters),
             url = renderUrl(link, params),
@@ -243,15 +280,40 @@ define("/common",
           url = this.baseURI + url;
         }
 
-        var useCache = false,
-            f = this.getURISubscription(url, callback);
-        if (method == "GET") {
-          useCache = this.sendCache(url, f)
+        var stream = {
+          then: function(subcallback, onerror) {
+            var subscription = postal.subscribe({
+              channel: self.channel,
+              topic: "document:"+url,
+              callback: function(document) {
+                if (subcallback(document) === false) {
+                  subscription.unsubscribe();
+                }
+              }
+            });
+
+            postal.request({
+              channel: self.channel,
+              topic: "open",
+              data: {
+                url: url,
+                payload: data,
+                method: method
+              }
+            }).then(function(promise) {
+              promise.catch(function(error) {
+                subscription.unsubscribe()
+                onerror(error)
+              })
+            }, function(error) {
+              subscription.unsubscribe()
+              onerror(error)
+            });
+            //fire it off
+            return subscription;
+          }
         }
-        if (!useCache) {
-          this.callURI(url, method, data, f)
-        }
-        return f
+        return stream;
       },
       registerSchema: function(identifier, schema) {
         this.schemas[identifier] = schema;
@@ -294,12 +356,6 @@ define("/common",
       getURI: function(identifierOrDocument, filters, params) {
         return renderUrl(this.getLink(identifierOrDocument, filters), params)
       },
-      getURISubscription: function(url, callback) {
-        //Clients can put bacon.js or postal.js here
-        return function(val) {
-          if (callback) callback(val)
-        }
-      },
       parseResponse: function(response) {
         if (response.error) {
           throw(response.error)
@@ -335,13 +391,18 @@ define("/common",
 
         return document
       },
-      callURI: function(url, method, data, callback) {
-        var self = this;
+      callURI: function(url, method, data) {
+        var self = this,
+            deferred = postal.configuration.promise.createDeferred();
+
         doRequest(url, method, self.headers, data, function(response) {
           var document = self.parseResponse(response);
           self.publishDocument(document);
-          if (callback) callback(document);
+          deferred.resolve(document);
+        }, function(response) {
+          deferred.reject(response.text)
         });
+        return postal.configuration.promise.getPromise(deferred);
       },
       publishDocument: function(document, success) {
         if (!success && !this.checkSuccess(document)) return
@@ -353,7 +414,12 @@ define("/common",
         return true;
       },
       notifySubscribers: function(document) {
-        //Clients should notify subscribers here
+        var url = this.getMeta(document).uri;
+        postal.publish({
+          channel: this.channel,
+          topic: "document:"+url,
+          data: document
+        });
       },
       updateCache: function() {
         //no-op
@@ -453,10 +519,10 @@ define("/common",
           }
         }
       },
-      sendCache: function(url, callback) {
+      sendCache: function(url, payload) {
         var cache = this.objects[url];
         if (cache) {
-          callback(cache)
+          this.notifySubscribers(cache)
           var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
           if (time_since < this.cacheTime) {
             return true;

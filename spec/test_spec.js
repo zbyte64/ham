@@ -1,6 +1,19 @@
 "use strict";
 
 var _ = require("lodash");
+var postal = require("postal");
+require('postal.request-response')(postal);
+var Q = require("q");
+
+
+// We need to tell postal how to get a deferred instance
+postal.configuration.promise.createDeferred = function() {
+    return Q.defer();
+};
+// We need to tell postal how to get a "public-facing"/safe promise instance
+postal.configuration.promise.getPromise = function(dfd) {
+    return dfd.promise;
+};
 
 var Calculator = function Calculator() {
   return {

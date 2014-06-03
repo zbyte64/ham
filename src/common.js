@@ -112,7 +112,7 @@ export function getIn(struct, path) {
   }
 }
 
-export function doRequest(url, method, headers, data, callback) {
+export function doRequest(url, method, headers, data, callback, onError) {
   method = method && method.toUpperCase() || "GET"
   headers = headers || {}
   headers.accept = headers.accept || 'application/json'
@@ -136,7 +136,12 @@ export function doRequest(url, method, headers, data, callback) {
   }
   req.end(function(res) {
     res.redirects = redirects
-    callback(res)
+    if (res.ok) {
+       callback(res)
+    } else {
+      onError(res)
+    }
+
   });
   return req
 };

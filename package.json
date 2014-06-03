@@ -9,11 +9,15 @@
   },
   "dependencies": {
     "lodash": "~2.4.1",
-    "superagent": "~0.17.0"
+    "superagent": "~0.17.0",
+    "postal": "0.10.0",
+    "postal.request-response": "0.1.2",
+    "conduitjs": "0.3.2"
   },
   "devDependencies": {
     "grunt": "~0.4.4",
     "es6ify": "~1.0.3",
+    "q": "1.0.1",
     "grunt-es6-module-transpiler": "~0.6.0",
     "grunt-contrib-uglify": "~0.4.0",
     "grunt-contrib-concat": "~0.4.0",
