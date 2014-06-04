@@ -238,13 +238,13 @@ define("/common",
         }
       },
       getDocument: function(identifier, filters, params, data, callback) {
-        var stream = this.openChannel(identifier, filters, params, data);
-        if (callback) return stream.then(callback)
+        var stream = this.openChannel(identifier, filters, params, data, true);
+        if (callback) return stream.then(callback);
         return stream
       },
       streamDocument: function(identifier, filters, params, data, callback) {
         //TODO this will mean open a websocket
-        var stream = this.openChannel(identifier, filters, params, data);
+        var stream = this.openChannel(identifier, filters, params, data, false);
         if (callback) return stream.then(callback)
         return stream
       },
@@ -264,18 +264,18 @@ define("/common",
 
             if (!useCache) {
               self.callURI(data.url, data.method, data.payload).then(function(doc) {
-                deferred.resolve()
+                deferred.resolve(doc)
               }, function(reason) {
                 deferred.reject(reason)
               })
             } else {
-              deferred.resolve()
+              deferred.resolve(null)
             }
             envelope.reply(postal.configuration.promise.getPromise(deferred))
           }
         );
       },
-      openChannel: function(identifier, filters, params, data) {
+      openChannel: function(identifier, filters, params, data, once) {
         if (!this.setupResponsesDone) this.setupResponses()
         //lookup the endpoint and return a subscription to the result
         var self = this,
@@ -288,15 +288,14 @@ define("/common",
 
         var stream = {
           then: function(subcallback, onerror) {
-            onerror = onerror || (typeof window == "undefined") ? console.error : window.onerror
-            var subscription = self.channel.subscribe(
-              "document:"+url,
-              function(document) {
-                if (subcallback(document) === false) {
-                  subscription.unsubscribe();
-                }
+            onerror = onerror || (typeof window == "undefined") ? console.error : (window.onerror || console.error)
+            var subscription = self.channel.subscribe("document:"+url, function(){});
+
+            function exitableCallback(document) {
+              if (subcallback(document) === false) {
+                subscription.unsubscribe();
               }
-            );
+            }
 
             self.channel.request({
               topic: "open",
@@ -306,16 +305,23 @@ define("/common",
                 method: method
               },
               timeout: self.timeout
-            }).then(function(promise) {
-              promise.catch(function(error) {
-                subscription.unsubscribe()
-                onerror(error)
-              })
+            }).then(function(doc) {
+              if (doc !== null) {
+                if (subcallback(doc) === false || once) {
+                  subscription.unsubscribe()
+                } else {
+                  subscription.subscribe(exitableCallback);
+                }
+              } else {
+                subscription.subscribe(exitableCallback);
+              }
             }, function(error) {
+              //timeout
               subscription.unsubscribe()
               onerror(error)
             });
             //fire it off
+            if (once) return subscription.once()
             return subscription;
           }
         }
@@ -526,6 +532,7 @@ define("/common",
         }
       },
       sendCache: function(url, payload) {
+        if (payload) return false;
         var cache = this.objects[url];
         if (cache) {
           this.notifySubscribers(cache)
