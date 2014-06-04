@@ -105,7 +105,7 @@ export var HamProcessor = {
             deferred.reject(reason)
           })
         } else {
-          deferred.resolve(null)
+          deferred.resolve(useCache)
         }
         envelope.reply(postal.configuration.promise.getPromise(deferred))
       }
@@ -371,10 +371,9 @@ export var HamCacher = {
     if (payload) return false;
     var cache = this.objects[url];
     if (cache) {
-      this.notifySubscribers(cache)
       var time_since = (new Date().getTime()) - this.getMeta(cache).timestamp;
       if (time_since < this.cacheTime) {
-        return true;
+        return cache;
       }
     }
     return false
