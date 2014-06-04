@@ -1,4 +1,4 @@
-/*! ham 2014-06-03 */
+/*! ham 2014-06-04 */
 define("/common", 
   ["lodash","superagent","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -288,7 +288,7 @@ define("/common",
 
         var stream = {
           then: function(subcallback, onerror) {
-            onerror = onerror || (typeof window == "undefined") ? console.error : (window.onerror || console.error)
+            onerror = onerror ? onerror : ((typeof window == "undefined") ? console.error : (window.onerror || console.error))
             var subscription = self.channel.subscribe("document:"+url, function(){});
 
             function exitableCallback(document) {

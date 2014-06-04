@@ -124,7 +124,7 @@ export var HamProcessor = {
 
     var stream = {
       then: function(subcallback, onerror) {
-        onerror = onerror || (typeof window == "undefined") ? console.error : (window.onerror || console.error)
+        onerror = onerror ? onerror : ((typeof window == "undefined") ? console.error : (window.onerror || console.error))
         var subscription = self.channel.subscribe("document:"+url, function(){});
 
         function exitableCallback(document) {
