@@ -236,21 +236,25 @@ define("/common",
           return document
         }
       },
-      getDocument: function(identifier, filters, params, data) {
-        return this.openChannel(identifier, filters, params, data);
+      getDocument: function(identifier, filters, params, data, callback) {
+        var stream = this.openChannel(identifier, filters, params, data);
+        if (callback) return stream.then(callback)
+        return stream
       },
-      streamDocument: function(identifier, filters, params, data) {
+      streamDocument: function(identifier, filters, params, data, callback) {
         //TODO this will mean open a websocket
-        return this.openChannel(identifier, filters, params, data)
+        var stream = this.openChannel(identifier, filters, params, data);
+        if (callback) return stream.then(callback)
+        return stream
       },
       setupResponses: function() {
-        this.setupResponsesDone = true;
+        if (_.isString(this.channel)) {
+          this.channel = postal.channel(this.channel);
+        }
         var self = this;
-        var subscription = postal.subscribe({
-          //sets up a listener that returns a promise that resolves to an event subscription
-          channel: this.channel,
-          topic: "open",
-          callback: function(data, envelope) {
+        this.setupResponsesDone = this.channel.subscribe(
+          "open",
+          function(data, envelope) {
             var useCache = false;
             var deferred = postal.configuration.promise.createDeferred();
             if (data.method == "GET") {
@@ -258,7 +262,7 @@ define("/common",
             }
 
             if (!useCache) {
-              this.callURI(data.url, data.method, data.payload).then(function(doc) {
+              self.callURI(data.url, data.method, data.payload).then(function(doc) {
                 deferred.resolve()
               }, function(reason) {
                 deferred.reject(reason)
@@ -268,12 +272,13 @@ define("/common",
             }
             envelope.reply(postal.configuration.promise.getPromise(deferred))
           }
-        })
+        );
       },
       openChannel: function(identifier, filters, params, data) {
         if (!this.setupResponsesDone) this.setupResponses()
         //lookup the endpoint and return a subscription to the result
-        var link = this.getLink(identifier, filters),
+        var self = this,
+            link = this.getLink(identifier, filters),
             url = renderUrl(link, params),
             method = link.method && link.method.toUpperCase() || "GET";
         if (this.baseURI && url[0] == '/') {
@@ -282,18 +287,17 @@ define("/common",
 
         var stream = {
           then: function(subcallback, onerror) {
-            var subscription = postal.subscribe({
-              channel: self.channel,
-              topic: "document:"+url,
-              callback: function(document) {
+            onerror = onerror || (typeof window == "undefined") ? console.error : window.onerror
+            var subscription = self.channel.subscribe(
+              "document:"+url,
+              function(document) {
                 if (subcallback(document) === false) {
                   subscription.unsubscribe();
                 }
               }
-            });
+            );
 
-            postal.request({
-              channel: self.channel,
+            self.channel.request({
               topic: "open",
               data: {
                 url: url,
@@ -414,9 +418,9 @@ define("/common",
         return true;
       },
       notifySubscribers: function(document) {
+        if (!this.setupResponsesDone) this.setupResponses()
         var url = this.getMeta(document).uri;
-        postal.publish({
-          channel: this.channel,
+        this.channel.publish({
           topic: "document:"+url,
           data: document
         });
