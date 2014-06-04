@@ -16,6 +16,7 @@ if (_.isFunction(_rr)) _rr(postal);
 var HamProcessor = {
   baseURI: '',
   channel: 'ham',
+  timeout: 5000,
   regexProfileURI: /.*;.*profile\=([A-Za-z0-9\-_\/\#]+).*/,
   rootLink: function(document) {
     return this.getLink(document, {rel: 'root'});
@@ -147,7 +148,8 @@ var HamProcessor = {
             url: url,
             payload: data,
             method: method
-          }
+          },
+          timeout: self.timeout
         }).then(function(promise) {
           promise.catch(function(error) {
             subscription.unsubscribe()
