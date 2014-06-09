@@ -1,4 +1,4 @@
-/*! ham 2014-06-04 */
+/*! ham 2014-06-09 */
 define("/common", 
   ["lodash","superagent","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -445,10 +445,6 @@ define("/common",
     __exports__.HamProcessor = HamProcessor;
     var HamCacher = {
       cacheTime: 5 * 60 * 1000, //in milliseconds, 5 minute default
-      schemas: {},
-      objects: {},
-      recycle_bin: {},
-      schema_sources: {},
       resolveInstancesUrlFromDetailUrl: function(url) {
         var self = this,
             found_link = null,
@@ -566,7 +562,12 @@ define("/common",
     };
     __exports__.HamCacher = HamCacher;
     function Ham(props) {
-      return _.extend({}, HamProcessor, HamCacher, props)
+      return _.extend({
+        schemas: {},
+        objects: {},
+        recycle_bin: {},
+        schema_sources: {},
+      }, HamProcessor, HamCacher, props);
     };
     __exports__.Ham = Ham;
   });define("ham", ["/ham"], function(ham) {return ham});

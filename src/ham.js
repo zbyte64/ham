@@ -281,10 +281,6 @@ export var HamProcessor = {
 
 export var HamCacher = {
   cacheTime: 5 * 60 * 1000, //in milliseconds, 5 minute default
-  schemas: {},
-  objects: {},
-  recycle_bin: {},
-  schema_sources: {},
   resolveInstancesUrlFromDetailUrl: function(url) {
     var self = this,
         found_link = null,
@@ -402,6 +398,11 @@ export var HamCacher = {
 };
 
 export function Ham(props) {
-  return _.extend({}, HamProcessor, HamCacher, props)
+  return _.extend({
+    schemas: {},
+    objects: {},
+    recycle_bin: {},
+    schema_sources: {},
+  }, HamProcessor, HamCacher, props);
 };
 
