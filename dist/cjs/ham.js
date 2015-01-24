@@ -81,15 +81,15 @@ var HamProcessor = {
       return document
     }
   },
-  getDocument: function(identifier, filters, params, data, callback) {
+  getDocument: function(identifier, filters, params, data, callback, errorCallback) {
     var stream = this.openChannel(identifier, filters, params, data, true);
-    if (callback) return stream.then(callback);
+    if (callback) return stream.then(callback, errorCallback);
     return stream
   },
-  streamDocument: function(identifier, filters, params, data, callback) {
+  streamDocument: function(identifier, filters, params, data, callback, errorCallback) {
     //TODO this will mean open a websocket
     var stream = this.openChannel(identifier, filters, params, data, false);
-    if (callback) return stream.then(callback)
+    if (callback) return stream.then(callback, errorCallback)
     return stream
   },
   setupResponses: function() {
