@@ -7,7 +7,17 @@ Usage::
   //Construct our schema-json aware client
   var client = Ham()
 
-  //helper function to load up schemas from a url
+  //Register a schema with links
+  client.registerSchema('site', {
+    links: [
+      {rel: 'instances', method:'GET', href:'/api/v2/sites/'},
+      {rel: 'create', method:'POST', href:'/api/v2/sites/{site_id}/'},
+      {rel: 'full', method:'GET', href:'/api/v2/sites/{site_id}/'},
+      {rel: 'update', method:'PUT', href:'/api/v2/sites/{site_id}/'}
+    ]
+  });
+
+  //Or use a helper function to load up schemas from a url
   client.populateSchemasFromUri('/api/v2/schemas/')
 
   //get a document
@@ -22,13 +32,8 @@ Usage::
     console.log("there was an error:", error);
   });
 
-
-  //manually register a schemma
-  client.registerSchema('assets', {schema info})
-
   //retrieve a Link Description Object [LDO]
   client.getLink('assets', {rel: 'update', method: 'patch'})
 
   //do a URL lookup
   client.getURI('assets', {rel: 'update', method: 'patch'}, {site_id: 1})
-
