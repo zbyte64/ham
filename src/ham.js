@@ -93,21 +93,17 @@ export var HamProcessor = {
       "open",
       function(data, envelope) {
         var useCache = false;
-        var deferred = postal.configuration.promise.createDeferred();
         if (data.method == "GET") {
           useCache = self.sendCache(data.url, data.payload)
         }
 
         if (!useCache) {
-          self.callURI(data.url, data.method, data.payload).then(function(doc) {
-            deferred.resolve(doc)
-          }, function(reason) {
-            deferred.reject(reason)
-          })
+          self.callURI(data.url, data.method, data.payload).then(
+            _.partial(envelope.reply, null),
+            envelope.reply);
         } else {
-          deferred.resolve(useCache)
+          envelope.reply(null, useCache);
         }
-        envelope.reply(null, postal.configuration.promise.getPromise(deferred))
       }
     );
   },
