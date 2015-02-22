@@ -115,7 +115,7 @@ var HamProcessor = {
         } else {
           deferred.resolve(useCache)
         }
-        envelope.reply(postal.configuration.promise.getPromise(deferred))
+        envelope.reply(null, postal.configuration.promise.getPromise(deferred))
       }
     );
   },

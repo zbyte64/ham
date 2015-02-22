@@ -1,4 +1,4 @@
-/*! ham 2015-01-23 */
+/*! ham 2015-02-22 */
 define("/common", 
   ["lodash","superagent","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -271,7 +271,7 @@ define("/common",
             } else {
               deferred.resolve(useCache)
             }
-            envelope.reply(postal.configuration.promise.getPromise(deferred))
+            envelope.reply(null, postal.configuration.promise.getPromise(deferred))
           }
         );
       },
