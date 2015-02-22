@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "lodash": "~2.4.1",
-    "superagent": "~0.17.0"
+    "superagent": "~0.21.0"
   },
   "devDependencies": {
     "grunt": "~0.4.4",

@@ -135,10 +135,13 @@ exports.getIn = getIn;function doRequest(url, method, headers, data, callback, o
       req.send(JSON.stringify(data))
     }
   }
-  req.end(function(res) {
+  req.end(function(error, res) {
+    if (error) {
+      return onError(error);
+    }
     res.redirects = redirects
     if (res.ok) {
-       callback(res)
+      callback(res)
     } else {
       onError(res)
     }

@@ -243,9 +243,7 @@ export var HamProcessor = {
       var document = self.parseResponse(response);
       self.publishDocument(document);
       deferred.resolve(document);
-    }, function(response) {
-      deferred.reject(response.text)
-    });
+    },deferred.reject);
     return postal.configuration.promise.getPromise(deferred);
   },
   publishDocument: function(document, success) {

@@ -139,10 +139,13 @@ define("/common",
           req.send(JSON.stringify(data))
         }
       }
-      req.end(function(res) {
+      req.end(function(error, res) {
+        if (error) {
+          return onError(error);
+        }
         res.redirects = redirects
         if (res.ok) {
-           callback(res)
+          callback(res)
         } else {
           onError(res)
         }
@@ -407,9 +410,7 @@ define("/common",
           var document = self.parseResponse(response);
           self.publishDocument(document);
           deferred.resolve(document);
-        }, function(response) {
-          deferred.reject(response.text)
-        });
+        },deferred.reject);
         return postal.configuration.promise.getPromise(deferred);
       },
       publishDocument: function(document, success) {
