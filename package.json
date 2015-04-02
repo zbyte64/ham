@@ -1,27 +1,25 @@
 {
   "name": "ham",
   "description": "Hypermedia Abstraction Mapper (Client)",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
     "url": "git://github.com/zbyte64/ham.git"
   },
   "dependencies": {
-    "lodash": "~2.4.1",
-    "superagent": "~0.21.0"
+    "lodash": "~3.6.0",
+    "superagent": "~1.1.0"
   },
   "devDependencies": {
     "grunt": "~0.4.4",
     "es6ify": "~1.0.3",
-    "q": "1.0.1",
+    "q": "1.1.2",
     "grunt-es6-module-transpiler": "~0.6.0",
     "grunt-contrib-uglify": "~0.4.0",
     "grunt-contrib-concat": "~0.4.0",
     "grunt-contrib-clean": "~0.5.0",
-    "grunt-jasmine-node": "~0.2.1",
-    "postal": "1.0.0",
-    "postal.request-response": "0.3.1"
+    "grunt-jasmine-node": "~0.2.1"
   },
   "files": [
     "dist/ham.min.js",
