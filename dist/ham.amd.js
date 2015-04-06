@@ -1,4 +1,4 @@
-/*! ham 2015-02-22 */
+/*! ham 2015-04-02 */
 define("/common", 
   ["lodash","superagent","exports"],
   function(__dependency1__, __dependency2__, __exports__) {
@@ -155,26 +155,22 @@ define("/common",
     };
     __exports__.doRequest = doRequest;
   });;define("/ham", 
-  ["lodash","postal","postal.request-response","./common","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
+  ["lodash","./common","q","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
     var _ = __dependency1__["default"] || __dependency1__;
-    var postal = __dependency2__["default"] || __dependency2__;
-    var _rr = __dependency3__["default"] || __dependency3__;
-    var renderUrl = __dependency4__.renderUrl;
-    var MetaArray = __dependency4__.MetaArray;
-    var MetaObject = __dependency4__.MetaObject;
-    var renderUrlMatcher = __dependency4__.renderUrlMatcher;
-    var assocIn = __dependency4__.assocIn;
-    var dissocIn = __dependency4__.dissocIn;
-    var getIn = __dependency4__.getIn;
-    var doRequest = __dependency4__.doRequest;
-
-    if (_.isFunction(_rr)) _rr(postal);
+    var renderUrl = __dependency2__.renderUrl;
+    var MetaArray = __dependency2__.MetaArray;
+    var MetaObject = __dependency2__.MetaObject;
+    var renderUrlMatcher = __dependency2__.renderUrlMatcher;
+    var assocIn = __dependency2__.assocIn;
+    var dissocIn = __dependency2__.dissocIn;
+    var getIn = __dependency2__.getIn;
+    var doRequest = __dependency2__.doRequest;
+    var Q = __dependency3__["default"] || __dependency3__;
 
     var HamProcessor = {
       baseURI: '',
-      channel: 'ham',
       timeout: 5000,
       regexProfileURI: /.*;.*profile\=([A-Za-z0-9\-_\/\#]+).*/,
       rootLink: function(document) {
@@ -241,90 +237,46 @@ define("/common",
         }
       },
       getDocument: function(identifier, filters, params, data, callback, errorCallback) {
-        var stream = this.openChannel(identifier, filters, params, data, true);
+        var stream = this.openChannel(identifier, filters, params, data);
         if (callback) return stream.then(callback, errorCallback);
         return stream
       },
       streamDocument: function(identifier, filters, params, data, callback, errorCallback) {
         //TODO this will mean open a websocket
-        var stream = this.openChannel(identifier, filters, params, data, false);
+        var stream = this.openChannel(identifier, filters, params, data);
         if (callback) return stream.then(callback, errorCallback)
         return stream
       },
-      setupResponses: function() {
-        if (_.isString(this.channel)) {
-          this.channel = postal.channel(this.channel);
+      sendRequest: function(data) {
+        var deferred = Q.defer();
+        var useCache = false;
+        if (data.method === "GET") {
+          useCache = this.sendCache(data.url, data.payload)
         }
-        var self = this;
-        this.setupResponsesDone = this.channel.subscribe(
-          "open",
-          function(data, envelope) {
-            var useCache = false;
-            if (data.method == "GET") {
-              useCache = self.sendCache(data.url, data.payload)
-            }
-
-            if (!useCache) {
-              self.callURI(data.url, data.method, data.payload).then(
-                _.partial(envelope.reply, null),
-                envelope.reply);
-            } else {
-              envelope.reply(null, useCache);
-            }
-          }
-        );
+        if (!useCache) {
+          this.callURI(data.url, data.method, data.payload).then(
+            deferred.resolve,
+            deferred.reject);
+        } else {
+          deferred.resolve(useCache);
+        }
+        return deferred.promise;
       },
-      openChannel: function(identifier, filters, params, data, once) {
-        if (!this.setupResponsesDone) this.setupResponses()
+      openChannel: function(identifier, filters, params, data) {
         //lookup the endpoint and return a subscription to the result
         var self = this,
             link = this.getLink(identifier, filters),
             url = renderUrl(link, params),
             method = link.method && link.method.toUpperCase() || "GET";
-        if (this.baseURI && url[0] == '/') {
+        if (this.baseURI && url[0] === '/') {
           url = this.baseURI + url;
         }
 
-        var stream = {
-          then: function(subcallback, onerror) {
-            onerror = onerror ? onerror : ((typeof window == "undefined") ? console.error : (window.onerror || console.error))
-            var subscription = self.channel.subscribe("document:"+url, function(){});
-
-            function exitableCallback(document) {
-              if (subcallback(document) === false) {
-                subscription.unsubscribe();
-              }
-            }
-
-            self.channel.request({
-              topic: "open",
-              data: {
-                url: url,
-                payload: data,
-                method: method
-              },
-              timeout: self.timeout
-            }).then(function(doc) {
-              if (doc !== null) {
-                if (subcallback(doc) === false || once) {
-                  subscription.unsubscribe()
-                } else {
-                  subscription.subscribe(exitableCallback);
-                }
-              } else {
-                subscription.subscribe(exitableCallback);
-              }
-            }, function(error) {
-              //timeout
-              subscription.unsubscribe()
-              onerror(error)
-            });
-            //fire it off
-            if (once) return subscription.once()
-            return subscription;
-          }
-        }
-        return stream;
+        return this.sendRequest({
+          url: url,
+          payload: data,
+          method: method
+        });
       },
       registerSchema: function(identifier, schema) {
         this.schemas[identifier] = schema;
@@ -334,7 +286,7 @@ define("/common",
       },
       getLink: function(identifierOrDocument, filters) {
         var links = null;
-        if (typeof identifierOrDocument == "string") {
+        if (typeof identifierOrDocument === "string") {
           var schema = this.getSchema(identifierOrDocument);
           //TODO get link defs for schema through schema definition
           if (!schema) {
@@ -351,7 +303,7 @@ define("/common",
         //case insensitive matching
         links = _.transform(links, function(result, link) {
           if (_.every(filters, function(value, key) {
-            if (typeof value == "string") {
+            if (typeof value === "string") {
               return link[key].toLowerCase() == value.toLowerCase()
             }
             return link[key] == value
@@ -379,7 +331,7 @@ define("/common",
 
         if (response.headers.length) {
           uri = response.headers[response.headers.length-1]
-          if (action != "DELETE") {
+          if (action !== "DELETE") {
             action = "GET"
           }
         }
@@ -404,14 +356,14 @@ define("/common",
       },
       callURI: function(url, method, data) {
         var self = this,
-            deferred = postal.configuration.promise.createDeferred();
+            deferred = Q.defer();
 
         doRequest(url, method, self.headers, data, function(response) {
           var document = self.parseResponse(response);
           self.publishDocument(document);
           deferred.resolve(document);
         },deferred.reject);
-        return postal.configuration.promise.getPromise(deferred);
+        return deferred.promise;
       },
       publishDocument: function(document, success) {
         if (!success && !this.checkSuccess(document)) return
@@ -423,12 +375,7 @@ define("/common",
         return true;
       },
       notifySubscribers: function(document) {
-        if (!this.setupResponsesDone) this.setupResponses()
-        var url = this.getMeta(document).uri;
-        this.channel.publish({
-          topic: "document:"+url,
-          data: document
-        });
+        return;
       },
       updateCache: function() {
         //no-op
@@ -470,7 +417,7 @@ define("/common",
         var meta = this.getMeta(document),
             url = meta.uri;
         //console.log("update cache on:", meta)
-        if (meta.action == "DELETE") {
+        if (meta.action === "DELETE") {
           dissocIn(this.objects, [url])
 
           //remove the object from our instances cache
@@ -493,8 +440,8 @@ define("/common",
             this.publishDocument(instancesDocument, true)
           }
           //the result of a get or modification
-        } else if (meta.action == "GET" || meta.action == "PATCH" ||
-                   meta.action == "POST" || meta.action == "PUT") {
+        } else if (meta.action === "GET" || meta.action === "PATCH" ||
+                   meta.action === "POST" || meta.action === "PUT") {
           this.objects[url] = document
 
           //add the object to our instances cache
@@ -537,7 +484,7 @@ define("/common",
       },
       populateSchemasFromUri: function(url) {
         var self = this,
-            deferred = postal.configuration.promise.createDeferred();
+            deferred = Q.defer();
         doRequest(url, "GET", this.headers, null, function(response) {
           var schemas = self.parseResponse(response)
           self.schema_sources[url] = schemas;
@@ -554,7 +501,7 @@ define("/common",
           });
           deferred.resolve(schemas)
         });
-        return postal.configuration.promise.getPromise(deferred)
+        return deferred.promise;
       }
     };
     __exports__.HamCacher = HamCacher;
