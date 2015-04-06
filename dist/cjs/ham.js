@@ -8,7 +8,6 @@ var assocIn = require("./common").assocIn;
 var dissocIn = require("./common").dissocIn;
 var getIn = require("./common").getIn;
 var doRequest = require("./common").doRequest;
-var Q = require("q")["default"] || require("q");
 
 var HamProcessor = {
   baseURI: '',
@@ -89,19 +88,19 @@ var HamProcessor = {
     return stream
   },
   sendRequest: function(data) {
-    var deferred = Q.defer();
-    var useCache = false;
-    if (data.method === "GET") {
-      useCache = this.sendCache(data.url, data.payload)
-    }
-    if (!useCache) {
-      this.callURI(data.url, data.method, data.payload).then(
-        deferred.resolve,
-        deferred.reject);
-    } else {
-      deferred.resolve(useCache);
-    }
-    return deferred.promise;
+    return new Promise((resolve, reject) => {
+      var useCache = false;
+      if (data.method === "GET") {
+        useCache = this.sendCache(data.url, data.payload)
+      }
+      if (!useCache) {
+        this.callURI(data.url, data.method, data.payload).then(
+          resolve,
+          reject);
+      } else {
+        resolve(useCache);
+      }
+    })
   },
   openChannel: function(identifier, filters, params, data) {
     //lookup the endpoint and return a subscription to the result
@@ -196,15 +195,14 @@ var HamProcessor = {
     return document
   },
   callURI: function(url, method, data) {
-    var self = this,
-        deferred = Q.defer();
-
-    doRequest(url, method, self.headers, data, function(response) {
-      var document = self.parseResponse(response);
-      self.publishDocument(document);
-      deferred.resolve(document);
-    },deferred.reject);
-    return deferred.promise;
+    var self = this
+    return new Promise((resolve, reject) => {
+      doRequest(url, method, self.headers, data, function(response) {
+        var document = self.parseResponse(response);
+        self.publishDocument(document);
+        resolve(document);
+      },reject);
+    })
   },
   publishDocument: function(document, success) {
     if (!success && !this.checkSuccess(document)) return
@@ -324,25 +322,25 @@ var HamCacher = {
     return false
   },
   populateSchemasFromUri: function(url) {
-    var self = this,
-        deferred = Q.defer();
-    doRequest(url, "GET", this.headers, null, function(response) {
-      var schemas = self.parseResponse(response)
-      self.schema_sources[url] = schemas;
+    return new Promise((resolve, reject) => {
+      var self = this
+      doRequest(url, "GET", this.headers, null, function(response) {
+        var schemas = self.parseResponse(response)
+        self.schema_sources[url] = schemas;
 
-      schemas = _.transform(schemas, function(result, val, key) {
-        if(typeof val == "object") {
-          result[key] = val
-        }
-      });
+        schemas = _.transform(schemas, function(result, val, key) {
+          if(typeof val == "object") {
+            result[key] = val
+          }
+        });
 
-      _.each(schemas, function(schema, key) {
-        self.registerSchema(key, schema)
-        self.registerSchema(url + "#/" + key, schema)
+        _.each(schemas, function(schema, key) {
+          self.registerSchema(key, schema)
+          self.registerSchema(url + "#/" + key, schema)
+        });
+        resolve(schemas)
       });
-      deferred.resolve(schemas)
-    });
-    return deferred.promise;
+    })
   }
 };
 exports.HamCacher = HamCacher;
