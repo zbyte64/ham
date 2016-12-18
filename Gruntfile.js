@@ -43,6 +43,13 @@ module.exports = function(grunt) {
         dest: 'dist/ham.amd.js'
       }
     },
+    'babel': {
+        dist: {
+            files: {
+              'dist/ham.amd.js': 'dist/ham.amd.js'
+            }
+        }
+    },
     uglify: {
       ham: {
         src: 'dist/ham.amd.js',
@@ -73,9 +80,10 @@ module.exports = function(grunt) {
   grunt.loadNpmTasks('grunt-contrib-clean');
   grunt.loadNpmTasks('grunt-es6-module-transpiler');
   grunt.loadNpmTasks('grunt-jasmine-node');
+  grunt.loadNpmTasks('grunt-babel');
 
   grunt.registerTask('build', ['clean', 'transpile', 'concat'])
-  grunt.registerTask('dist', ['build', 'uglify'])
+  grunt.registerTask('dist', ['build', 'babel','uglify'])
   grunt.registerTask('default', ['dist'])
   grunt.registerTask('test', ['build', 'jasmine_node'])
 }

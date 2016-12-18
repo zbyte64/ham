@@ -47,7 +47,8 @@ function renderUrl(link, params) {
   return url;
 }
 
-exports.renderUrl = renderUrl;function renderUrlRegexp(link) {
+exports.renderUrl = renderUrl;
+function renderUrlRegexp(link) {
   var matchS = link.href,
       parts = matchS.match(urlTemplatePattern),
       args = [];
@@ -60,7 +61,8 @@ exports.renderUrl = renderUrl;function renderUrlRegexp(link) {
   return [new RegExp("^"+matchS+"$"), args]
 }
 
-exports.renderUrlRegexp = renderUrlRegexp;function renderUrlMatcher(link) {
+exports.renderUrlRegexp = renderUrlRegexp;
+function renderUrlMatcher(link) {
   var res = renderUrlRegexp(link),
       matcher = res[0],
       parts = res[1];
@@ -74,7 +76,8 @@ exports.renderUrlRegexp = renderUrlRegexp;function renderUrlMatcher(link) {
   }
 }
 
-exports.renderUrlMatcher = renderUrlMatcher;function assocIn(struct, path, value) {
+exports.renderUrlMatcher = renderUrlMatcher;
+function assocIn(struct, path, value) {
   var first = _.first(path),
       rest = _.rest(path);
   if (rest.length) {
@@ -87,7 +90,8 @@ exports.renderUrlMatcher = renderUrlMatcher;function assocIn(struct, path, value
   }
 }
 
-exports.assocIn = assocIn;function dissocIn(struct, path) {
+exports.assocIn = assocIn;
+function dissocIn(struct, path) {
   var first = _.first(path),
       rest = _.rest(path);
   if (rest.length) {
@@ -100,7 +104,8 @@ exports.assocIn = assocIn;function dissocIn(struct, path) {
   }
 }
 
-exports.dissocIn = dissocIn;function getIn(struct, path) {
+exports.dissocIn = dissocIn;
+function getIn(struct, path) {
   var first = _.first(path),
       rest = _.rest(path);
   if (rest.length) {
@@ -113,7 +118,8 @@ exports.dissocIn = dissocIn;function getIn(struct, path) {
   }
 }
 
-exports.getIn = getIn;function doRequest(url, method, headers, data, callback, onError) {
+exports.getIn = getIn;
+function doRequest(url, method, headers, data, callback, onError) {
   method = method && method.toUpperCase() || "GET"
   headers = headers || {}
   headers.accept = headers.accept || 'application/json'

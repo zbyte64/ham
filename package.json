@@ -8,6 +8,7 @@
     "url": "git://github.com/zbyte64/ham.git"
   },
   "dependencies": {
+    "grunt-babel": "^5.0.0",
     "lodash": "~3.6.0",
     "superagent": "0.21.0"
   },
